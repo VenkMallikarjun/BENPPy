@@ -1,4 +1,4 @@
-# BENPPy
+# BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
 ## Additonal features over BayesENproteomics Matlab implementation:
