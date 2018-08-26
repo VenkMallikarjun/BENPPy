@@ -415,6 +415,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         model_table = pd.concat([othermains,model_table],axis=1,sort = False)      
     
     if regression_method == 'dataset':
+        protein_matrix = np.tile(protein_matrix,(nRuns,1))
         model_table = pd.concat([protein_matrix,model_table],axis=1,sort = False)  
         
     return final_peplist, model_table, missing_idx, uniprotall, nGroups, nRuns
@@ -588,6 +589,9 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
     t = [m+str(n) for m,n in zip(t2,t1)]
     nInteractors = len(otherinteractors)
     
+    protein_list = np.unique(model_table.loc[:,'Protein'])
+    nProteins = len(protein_list)
+    
     X = designMatrix(model_table,otherinteractors,incSubject,len(np.unique(model_table['Peptide'])))
     Y = np.array(model_table.loc[:,'Intensities'])[:,np.newaxis].astype('float32')
     parameterIDs = X.columns
@@ -599,19 +603,123 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
     n = X_missing.shape[0]
     X_missing = sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
     X = sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
-        
+    
+    #Preallocate dataframes to be filled by model fitting
+    column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
+    ProteinQuant = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+column_names)
+    PTMQuant = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
+    models = {} #Dictionary with all fitted protein models
+    #PTMQuant = pd.concat([PTMQuant,pd.DataFrame(np.zeros((ntotalPTMs,nGroups*4)),columns = column_names)],axis=1,ignore_index=True,sort=False)
+    
+    # Summing user-specified effects for subject-level protein quantification
+    SubjectLevelColumnNames = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = True)
+    SubjectLevelProteinQuant = pd.DataFrame(columns = SubjectLevelColumnNames)
+    SubjectLevelPTMQuant = pd.DataFrame(columns = SubjectLevelColumnNames)
+    
     # Fit missing model to choose which missing values are MNR and which are MAR
-    missingmdl,missingtrace = pymc3_weightedbayeslm(X_missing,Y_missing,parameterIDs_missing,False,np.ones([n,1]),np.array([]),nInteractors)
-    MNR = np.ravel(np.sum(np.concatenate((missingtrace['beta_estimate'] > 0, missingtrace['beta_estimate'] > missingtrace['b0']),axis=0),axis=0)) == 2
+    missingtrace = pymc3_weightedbayeslm(X_missing,Y_missing,parameterIDs_missing,False,np.ones([n,1]),np.array([]),nInteractors)[1]
+    missingb0 = np.array(pm.summary(missingtrace,varnames = ['b0'])['mean'])
+    missingbeta = np.array(pm.summary(missingtrace,varnames = ['beta_estimate'])['mean'])
+    MNR = np.ravel(np.sum(np.concatenate((missingbeta > 0, missingbeta > missingb0),axis=0),axis=0)) == 2
     Y_MNR = (X_missing[np.where(missing)[0],:][:,MNR].sum(axis=1) > 0)
 
     # Fit protein model to estimate fold changes while imputing missing values
-    proteinmdl,proteintrace = pymc3_weightedbayeslm(X,Y,parameterIDs,True,np.array(model_table['Score'])[:,np.newaxis],Y_MNR,nInteractors)
+    proteintrace = pymc3_weightedbayeslm(X,Y,parameterIDs,True,np.array(model_table['Score'])[:,np.newaxis],Y_MNR,nInteractors)[1]
     #b0SEM = list(proteinmdl['b0SEM'])
-    results = proteinmdl['beta_estimate']
-    SEMs = proteinmdl['SEMs']
-    dof = proteinmdl['dof']
-      
+    TreatmentPeptide_i = effectFinder(parameterIDs,'Treatment',True,'Peptide')
+    ProteinTreatment_i = effectFinder(parameterIDs,'Protein_',True,'Treatment')
+    betas = np.array(pm.summary(proteintrace,varnames = ['beta_estimate'])['mean'])
+    SEMs = np.array(pm.summary(proteintrace,varnames = ['beta_estimate'])['sd'])
+    
+    # Sort out protein summary table
+    protein_betas = betas[ProteinTreatment_i]
+    protein_SEMs = SEMs[ProteinTreatment_i]
+    DoF = np.array(pm.summary(proteintrace,varnames = ['DoF'])['mean'])
+    
+    
+    
+    # Sort out PTM summary table
+    TreatmentPeptide_betas = betas[TreatmentPeptide_i]
+    TreatmentPeptide_SEMs = SEMs[TreatmentPeptide_i]
+    TreatmentPeptide_names = parameterIDs[np.newaxis][TreatmentPeptide_i]
+
+    ntotalPTMs = 0
+    for peptide in np.unique(model_table.loc[:,'Peptide']):
+        PTMpositions_in_peptide = np.array(re.findall('\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
+        if len(PTMpositions_in_peptide) > 0:
+            #Get rows with mod, modded residue, modded peptideID for each peptide
+            PTMdResidues = [peptide[i] for i in PTMpositions_in_peptide]
+            PTMs = re.findall('(?<=] )\S+',peptide)
+            peptide_finder = model_table.loc[:,'Peptide'].isin([peptide])
+            #parent_protein = model_table.loc[peptide_finder,'Protein'][0]
+            parent_protein_sequnce = model_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
+            peptide_sequence = model_table.loc[peptide_finder,'PeptideSequence'].iloc[0]
+            parent_protein = model_table.loc[peptide_finder,'Protein'].iloc[0]
+            peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
+            if peptide_position_in_protein.size == 0:
+                peptide_position_in_protein = 0
+            try:
+                PTMpositions_in_protein = PTMpositions_in_peptide+1 + peptide_position_in_protein
+                if peptide_position_in_protein == 0:
+                    PTMpositions_in_protein = ['??']*len(PTMpositions_in_peptide)
+                else:
+                    PTMpositions_in_protein = list(PTMpositions_in_protein)
+            except:
+                PTMpositions_in_protein = ['Multiple']*len(PTMpositions_in_peptide)
+            peptide_score = np.mean(np.array(model_table.loc[peptide_finder,'Score'])) #Uses mean Mascot score of all instances of that peptide, for MaxQuant use localisation score (FDR filter peptides beforehand and give unmodified peptides an arbitrarily high value?)?
+                
+            #Get effect value and SEM for modded peptide:treatment interaction
+            #beta_finder = [list(TreatmentPeptide_names).index(beta) for beta in TreatmentPeptide_names if 'Peptide_'+peptide in beta]
+            #pepmatch = re.compile(r''+peptide)
+            #print(pepmatch,TreatmentPeptide_names,filter(pepmatch.search, list(TreatmentPeptide_names)))
+            beta_finder = list(filter(lambda x: x.endswith(peptide), list(TreatmentPeptide_names))) #[beta.start() for beta in re.finditer('Peptide_'+peptide+'$',list(TreatmentPeptide_names))
+            PTMbetas = TreatmentPeptide_betas[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_betas[i] for i in beta_finder]
+            #print(PTMbetas)
+            if PTMbetas.size == 0:
+                continue
+            PTMSEMs = TreatmentPeptide_SEMs[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_SEMs[i] for i in beta_finder]
+            PTMvalues = list(PTMbetas)+list(PTMSEMs)+[1]*nGroups*2
+
+            #Create new row for dataframe output table
+            for residue in range(len(PTMpositions_in_peptide)):
+                #print(protein, peptide, PTMs,residue, len(PTMpositions_in_peptide))
+                PTMrow = {'Peptide #':ntotalPTMs,
+                          'Parent protein':parent_protein,
+                          'Peptide':peptide,
+                          'Scaled peptide score':peptide_score,
+                          'PTMed residue':PTMdResidues[residue],
+                          'PTM type':PTMs[residue],
+                          'PTM position in peptide':PTMpositions_in_peptide[residue]+1,
+                          'PTM position in protein':PTMpositions_in_protein[residue],
+                          'degrees of freedom':DoF}
+                PTMrow.update(dict(zip(column_names,PTMvalues)))
+                        
+                PTMQuant = PTMQuant.append(PTMrow,ignore_index=True,sort=False)
+                    
+                if subQuantadd != ['']:
+                    # Subject-level PTM quantification by summing Treatment:Peptide interactions with user-specified:Peptide interaction terms
+                    subjectPTMQuant = np.concatenate((np.zeros((1,1)),TreatmentPeptide_betas[np.newaxis]),axis=1).T
+                    for parameter in range(len(subQuantadd)):
+                        subjectPTMQuant_i = (effectFinder(parameterIDs,'Peptide_'+peptide,True,subQuantadd[parameter])+effectFinder(parameterIDs,subQuantadd[parameter],True,'Peptide_'+peptide)) > 0
+                        subjectPTMQuant_betas = np.tile(np.concatenate((np.zeros((1,1)),betas[subjectPTMQuant_i][np.newaxis]),axis=1),(subjectPTMQuant.size,1))
+                        subjectPTMQuant = subjectPTMQuant + subjectPTMQuant_betas
+                        subjectPTMQuant = np.reshape(subjectPTMQuant,(-1,1),order='F')
+                        SubjectLevelPTMQuant = SubjectLevelPTMQuant.append(dict(zip(SubjectLevelColumnNames,list(subjectPTMQuant))),ignore_index=True,sort=False)
+                    
+        ntotalPTMs = ntotalPTMs + len(PTMpositions_in_peptide)
+        
+        if subQuantadd != ['']:
+            #Sort out Subject-level protein quantification
+            subjectLevelQuant = np.concatenate((np.zeros((1,1)),betas[ProteinTreatment_i][np.newaxis]),axis=1).T
+            for parameter in range(len(subQuantadd)):
+                subjectQuant_i = effectFinder(parameterIDs,subQuantadd[parameter])
+                subjectQuant_betas = np.tile(np.concatenate((np.zeros((1,1)),betas[subjectQuant_i][np.newaxis]),axis=1),(subjectLevelQuant.size,1))
+                subjectLevelQuant = subjectLevelQuant + subjectQuant_betas
+                subjectLevelQuant = np.reshape(subjectLevelQuant,(-1,1),order='F')
+                SubjectLevelProteinQuant = SubjectLevelProteinQuant.append(dict(zip(SubjectLevelColumnNames,list(subjectLevelQuant))),ignore_index=True,sort=False)
+
+    return ProteinQuant,PTMQuant,SubjectLevelProteinQuant,SubjectLevelPTMQuant,models
+  
 # Create design matrix for Treatment + Peptide + Treatment*Peptide + additional user-specified main and interaction effects.
 def designMatrix(protein_table,interactors,incSubject,nPeptides):
     
@@ -621,7 +729,10 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides):
         X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities'])!=True]
     else:
         X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject'])!=True]
-    X_main = pd.get_dummies(X_table)
+    protein_effects = effectFinder(X_table, 'Protein_')
+    X_main = pd.get_dummies(X_table.loc[:,protein_effects != True])
+    if np.any(protein_effects):
+        X_main = pd.concat((X_table.loc[:,protein_effects],X_main),axis=1,sort = False)
     X_main_labs = X_main.columns
     #print(X_main_labs)
     q = X_main.shape[0]
@@ -927,7 +1038,7 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     sigma2 = np.random.gamma(1,0.01)
     tau_vector = np.random.rand(1,p)
     do_weights = True
-    bayes_lm = pm.Model()
+        
     XtX = X.T @ X
     wX = dc(X)
     wY = dc(Y)
@@ -985,6 +1096,7 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
         tau_vector = pm.Wald('tau_vector',mu =T.sqrt(lambda_lasso/beta_estimate**2*sigma2),lam=lambda_lasso,shape = (1,p))
         lambda_lasso = pm.Gamma('lambda_lasso',alpha = p,beta = 1+T.sum(1/tau_vector)/2,shape=(1,1))
         lambda_ridge = pm.Gamma('lambda_ridge',alpha = 1+nInteractors, beta = 1/(beta_estimate**2/2/sigma2+0.001)+0.1,shape=(1,p))
+        DoF = pm.Constant('DoF',np.sum(T.dot(T.dot(X,L),X.T).diagonal()))
         
         if do_weights:
             r = 1/(0.1+residuals**2/2/sigma2)+0.00001
@@ -993,8 +1105,9 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
             wY = Yimputed*w
             wX = X*w
             XtX = T.dot(wX.T,wX)
+            
         Y_obs = pm.MvNormal('Y_obs', mu=b0+T.dot(X,beta_estimate.T), cov=sigma2, observed=Yimputed,shape=(n,1))
-        trace = pm.sample(500,njobs=1,nchains=1,nuts_kwargs={'max_treedepth':20,'target_accept':0.6,'integrator':'three-stage'},n_init=200,init='advi+adapt_diag')
+        trace = pm.sample(500,njobs=1,nchains=2,nuts_kwargs={'max_treedepth':20,'target_accept':0.6,'integrator':'three-stage'},n_init=200,init='advi+adapt_diag')
         
     return bayes_lm,trace
 
