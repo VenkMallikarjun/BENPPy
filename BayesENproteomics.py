@@ -159,11 +159,11 @@ class BayesENproteomics:
     def doContrasts(self, Contrasted = 'protein', ctrl=0, propagateErrors=False,UseBayesFactors=False):
         
         if Contrasted == 'protein':
-            self.Contrasted = dc(self.protein_results.summary_quant)
+            self.Contrasted = dc(self.protein_summary_quant)
         elif Contrasted == 'ptm':
-            self.Contrasted = dc(self.PTM_results.summary_quant)
+            self.Contrasted = dc(self.PTM_summary_quant)
         elif Contrasted == 'pathway':
-            self.Contrasted = dc(self.pathway_results.summary_quant)
+            self.Contrasted = dc(self.pathway_summary_quant)
         else:
             msg = 'Contrasted must be ''pathway'', ''protein'' or ''ptm''.'
             raise InputError(Contrasted,msg)
@@ -197,17 +197,18 @@ class BayesENproteomics:
             
 
     #PLOTS PLOTS PLOTS PLO-PLOTS PLOTS
-    def boxplots(self):        
+    def boxplots(self): 
+        nG = np.array(self.input_table['group number'])[0]
         fig1, ax1 = mpl.subplots()
-        mpl.boxplot(self.protein_results.summary_quant.iloc[:,4:4+self.stats.nGroups].T,notch=True,labels=self.protein_results.summary_quant.columns[4:4+self.stats.nGroups])
+        mpl.boxplot(self.protein_.summary_quant.iloc[:,4:4+nG].T,notch=True,labels=self.protein_results.summary_quant.columns[4:4+nG])
         ax1.set_title('Protein fold changes')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
         fig2, ax2 = mpl.subplots()
-        mpl.boxplot(self.PTM_results.summary_quant.iloc[:,9:9+self.stats.nGroups].T,notch=True,labels=self.PTM_results.summary_quant.columns[9:9+self.stats.nGroups])
+        mpl.boxplot(self.PTM_results.summary_quant.iloc[:,9:9+nG].T,notch=True,labels=self.PTM_results.summary_quant.columns[9:9+nG])
         ax2.set_title('PTM site occupancy fold changes')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
         fig3, ax3 = mpl.subplots()
-        mpl.boxplot(self.pathway_results.summary_quant.iloc[:,5:5+self.stats.nGroups].T,notch=True,labels=self.pathway_results.summary_quant.columns[5:5+self.stats.nGroups])
+        mpl.boxplot(self.pathway_results.summary_quant.iloc[:,5:5+nG].T,notch=True,labels=self.pathway_results.summary_quant.columns[5:5+nG])
         ax3.set_title('Pathway effect size')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
 
@@ -240,15 +241,13 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     print('Got Reactome pathway data')
     
     # Annotate pathway file with Identifiers used in protein quant
-    u2r_protein_id = pd.DataFrame(columns = ['Entry name'])
+    u2r_protein_id = pd.DataFrame({'Entry name':['']*uniprot2reactomedf.shape[0]}) #columns = ['Entry name'])
     for uniprotID in list(uniprotall.iloc[:,0].values.flatten()):
         u2r_protein_finder = uniprot2reactomedf.iloc[:,0].isin([uniprotID])
         if np.any(u2r_protein_finder):
-            name = uniprotall.loc[uniprotall.iloc[:,0].isin([uniprotID])]['Entry name']
-            u2r_protein_id = u2r_protein_id.append(pd.DataFrame({'Entry name':name.iloc[0]},index=[0]))
-            print('Pathways found for', name.iloc[0])
-    #print(uniprot2reactomedf,u2r_protein_id)
-    #uniprot2reactomedf = pd.concat([uniprot2reactomedf,u2r_protein_id],axis=1,sort=False)
+            name = uniprotall.loc[uniprotall.iloc[:,0].isin([uniprotID])]['Entry name'].iloc[0]
+            u2r_protein_id.loc[u2r_protein_finder] = name
+            print('Pathways found for', name)
     uniprot2reactomedf['Entry name'] = u2r_protein_id.reset_index(drop=True)
 
     # Get pathways represented in models and assign proteins in models to pathways
@@ -259,7 +258,6 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     for i in range(x2):
         protein_finder = uniprot2reactomedf['Entry name'].isin([models.iloc[i,0]])
         PathwayCount = PathwayCount + protein_finder[:,np.newaxis].astype(int)
-        #print([models.iloc[i,0]], np.any(protein_finder[:,np.newaxis].astype(int)))
         ProteinsInPathway[i,:] = ProteinsInPathway[i,:] + protein_finder.T
         print('Protein #',i, models.iloc[i,0],' found in ', np.sum(protein_finder), ' pathway(s).')
     uniprot2reactomedf = uniprot2reactomedf.loc[(PathwayCount > 0).flatten(),:]
@@ -290,7 +288,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         a = 1
         SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
 
-    t1 = list(np.unique(model_table.loc[:,'Treatment']))
+    t1 = list(np.unique(model_table['Treatment']))
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE']+column_names)
     pathway_models = {}
@@ -322,7 +320,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         Y = np.array(abundances)[:,np.newaxis].astype('float32')
 
         # Fit model
-        pathwaymdl = weighted_bayeslm(X,Y,parameterIDs,True,SEs,np.array([]),0)
+        pathwaymdl = weighted_bayeslm(X,Y,parameterIDs,True,np.ones((SEs.size,1)),np.array([]),0)
         results = pathwaymdl['beta_estimate']
         SEMs = pathwaymdl['SEMs']
         dof = pathwaymdl['dof']
@@ -745,7 +743,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                             subjectPTMQuant_betas = np.tile(np.concatenate((np.zeros((1,1)),results[subjectPTMQuant_i][np.newaxis]),axis=1),(subjectPTMQuant.size,1))
                             subjectPTMQuant = subjectPTMQuant + subjectPTMQuant_betas
                             subjectPTMQuant = np.reshape(subjectPTMQuant,(-1,1),order='F')
-                            SubjectLevelPTMQuant = SubjectLevelPTMQuant.append(dict(zip(SubjectLevelColumnNames,list(subjectPTMQuant))),ignore_index=True,sort=False)
+                            SubjectLevelPTMQuant = SubjectLevelPTMQuant.append(dict(zip(SubjectLevelColumnNames,subjectPTMQuant)),ignore_index=True,sort=False)
                     
             ntotalPTMs = ntotalPTMs + len(PTMpositions_in_peptide)
         
@@ -757,7 +755,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                 subjectQuant_betas = np.tile(np.concatenate((np.zeros((1,1)),results[subjectQuant_i][np.newaxis]),axis=1),(subjectLevelQuant.size,1))
                 subjectLevelQuant = subjectLevelQuant + subjectQuant_betas
                 subjectLevelQuant = np.reshape(subjectLevelQuant,(-1,1),order='F')
-                SubjectLevelProteinQuant = SubjectLevelProteinQuant.append(dict(zip(SubjectLevelColumnNames,list(subjectLevelQuant.astype(float)))),ignore_index=True,sort=False)
+                SubjectLevelProteinQuant = SubjectLevelProteinQuant.append(dict(zip(SubjectLevelColumnNames,subjectLevelQuant)),ignore_index=True,sort=False)
         
         #Store model with all parameters
         models[protein] = proteinmdl
@@ -1052,14 +1050,7 @@ def Progenesis2BENP(peplist):
     print('Importing',peplist,'peptide list: ')
     with open(peplist, newline = '') as csvfile:
         pepreader = csv.reader(csvfile)
-        #pepintensities = []
-        #seqs = []
-        #mods = []
-        #accessions = []
-        #scores = []
-        #nPeps = sum(1 for line in pepreader)
         n = 0;
-        #print(n, pepreader)
 
         for row in pepreader:
             #print(row)
