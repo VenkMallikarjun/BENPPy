@@ -62,15 +62,6 @@ class BayesENproteomics:
         protein_list = list(protein_summary_quant.iloc[:,0].values.flatten())
         protein_info = pd.DataFrame(columns = UniProt.columns[[0,2,-2]])
         
-#        self.protein_summary_quant = protein_summary_quant
-#        self.protein_subject_quant = protein_subject_quant
-#        self.PTM_summary_quant = PTM_summary_quant
-#        self.PTM_subject_quant = PTM_subject_quant
-#        self.protein_summary_quant.to_csv(self.output_name+'\\protein_summary_quant.csv', encoding='utf-8', index=False,header=protein_summary_quant.columns)
-#        self.protein_subject_quant.to_csv(self.output_name+'\\protein_subject_quant.csv', encoding='utf-8', index=False,header=protein_subject_quant.columns)
-#        self.PTM_summary_quant.to_csv(self.output_name+'\\PTM_summary_quant.csv', encoding='utf-8', index=False,header=PTM_summary_quant.columns)
-#        self.PTM_subject_quant.to_csv(self.output_name+'\\PTM_subject_quant.csv', encoding='utf-8', index=False,header=PTM_subject_quant.columns)
-
         # Append protein information used in pathway analysis
         for protein in protein_list:
             protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
@@ -200,15 +191,15 @@ class BayesENproteomics:
     def boxplots(self): 
         nG = np.array(self.input_table['group number'])[0]
         fig1, ax1 = mpl.subplots()
-        mpl.boxplot(self.protein_.summary_quant.iloc[:,4:4+nG].T,notch=True,labels=self.protein_results.summary_quant.columns[4:4+nG])
+        mpl.boxplot(self.protein_summary_quant.iloc[:,4:4+nG].T,notch=True,labels=self.protein_summary_quant.columns[4:4+nG])
         ax1.set_title('Protein fold changes')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
         fig2, ax2 = mpl.subplots()
-        mpl.boxplot(self.PTM_results.summary_quant.iloc[:,9:9+nG].T,notch=True,labels=self.PTM_results.summary_quant.columns[9:9+nG])
+        mpl.boxplot(self.PTM_summary_quant.iloc[:,9:9+nG].T,notch=True,labels=self.PTM_summary_quant.columns[9:9+nG])
         ax2.set_title('PTM site occupancy fold changes')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
         fig3, ax3 = mpl.subplots()
-        mpl.boxplot(self.pathway_results.summary_quant.iloc[:,5:5+nG].T,notch=True,labels=self.pathway_results.summary_quant.columns[5:5+nG])
+        mpl.boxplot(self.pathway_summary_quant.iloc[:,5:5+nG].T,notch=True,labels=self.pathway_summary_quant.columns[5:5+nG])
         ax3.set_title('Pathway effect size')
         mpl.ylabel(r'$Log_2 (condition / ctrl)$')
 
@@ -269,8 +260,6 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     #totalPinP = np.zeros((uniquePathways.shape[0],1))
 
     for i in range(uniquePathways.size):
-        #totalPinP[i] = uniprot2reactomedf.iloc[ia==i,0].size
-        #print(totalPinP[i],uniprot2reactomedf.iloc[ia==i,0],uniquePathways[i])
         ProteinsInPathway2[:,i] = np.sum(ProteinsInPathway[:,ia==i],axis=1)
     uniprot2reactomedf2 = uniprot2reactomedf2.loc[(totalPinP >= 5).flatten(),:]
     x1 = uniprot2reactomedf2.shape[0]
@@ -284,9 +273,11 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         a = int(nRuns/nGroups)
         FCcolumns = np.array(subjectQuant).astype(float)
         SEcolumns = np.tile(np.array(models.loc[:,['{SE}' in i for i in models.columns]]),(1,a)).astype(float)
+        doWeights = False
     else:
         a = 1
         SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
+        doWeights = True
 
     t1 = list(np.unique(model_table['Treatment']))
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
@@ -320,7 +311,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         Y = np.array(abundances)[:,np.newaxis].astype('float32')
 
         # Fit model
-        pathwaymdl = weighted_bayeslm(X,Y,parameterIDs,True,np.ones((SEs.size,1)),np.array([]),0)
+        pathwaymdl = weighted_bayeslm(X,Y,parameterIDs,doWeights,SEs,np.array([]),0)
         results = pathwaymdl['beta_estimate']
         SEMs = pathwaymdl['SEMs']
         dof = pathwaymdl['dof']
@@ -914,7 +905,6 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
 # Create design matrix for Treatment + Peptide + Treatment*Peptide + additional user-specified main and interaction effects.
 def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'protein'):
     
-    
     # Create design matrix - all fixed effects... for now.
     if incSubject:
         X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities'])!=True]
@@ -978,11 +968,13 @@ def quantTableNameConstructor(group_names,nRuns,isSubjectLevelQuant = False):
     
     log2FoldChanges = dc(group_names)
     SEs = dc(group_names)
-    Ps = dc(group_names)    # Replace p-values with Bayes Factors
+    Ps = dc(group_names)
     BHFDRs = dc(group_names)
     
     if isSubjectLevelQuant:
-        column_names = log2FoldChanges*int(nRuns/len(group_names))
+        column_names = []
+        for name in log2FoldChanges:
+            column_names = column_names+[name]*int(nRuns/len(group_names))   
         
         for i,j in zip(column_names,range(nRuns-1)):
             column_names[j] = i+str(j)
@@ -1097,11 +1089,8 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
 
     tau_vector = np.random.rand(p)
     D_tau_squared = sp.sparse.csc_matrix(np.diag(tau_vector.flatten()))
-    #not_intercept = np.where(bind[0,:] == 0)
-    #print(not_intercept[0])
 
     XtX = sp.sparse.csc_matrix(X.T @ X)
-    #print(X)
     w = np.ones((n,1),dtype=np.float32)
     sigma2_shape = (n-1+p)/2;
     beta_posterior = np.zeros((iNumIter-iBurn,p))
@@ -1143,7 +1132,6 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
                 # Impute MNR missing values from truncated gaussian
                 z = sp.stats.truncnorm.rvs(impmin,alpha,loc=meanY,scale=sigma2,size=(nMNR,1))
                 wY[Ymissing_i[np.where(MNR)[0]]] = z*w[Ymissing_i[np.where(MNR)[0]]]
-                #print(impmin/sigma2,alpha/sigma2,plo,phi,i,z,sigma2)
             if nMR:
                 # Impute MR missing values from multivariate_normal
                 B = sigma2*XXTYMR
@@ -1156,17 +1144,14 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
         # beta_estimate from conditional multivariate_normal
         L = sp.sparse.csc_matrix(np.diag((lambda_ridge+tau_vector).ravel()))
         L = sp.sparse.linalg.inv(XtX+L)
-        #print(sigma2,sigma2.shape)
         C = L.multiply(sigma2)
         A = np.ndarray.flatten(L @ (wX.T @ wY))
         beta_estimate = np.random.multivariate_normal(A,C.toarray())[np.newaxis]
         b0 = sigma2*np.random.randn(1,1)+np.nanmean(Yimputed)
-        #print(Yimputed[Ymissing])
 
         # sigma**2 from inverse gamma
         residuals = Yimputed - (b0 + X @ beta_estimate.T) #np.concatenate((X0,X),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T
         sigma2_scale = (residuals.T @ residuals)/2 + ((sp.sparse.linalg.inv(D_tau_squared) @ (beta_estimate*lambda_lasso).T).T @ beta_estimate.T)/2 + ((beta_estimate*lambda_ridge) @ beta_estimate.T)/2
-        #print(residuals,sigma2_scale)
         sigma2 = 1/np.random.gamma(sigma2_shape,1/(sigma2_scale+0.01) + 0.01) #Change to .ravel() ??
  
         # 1/tau**2 from IG
@@ -1177,7 +1162,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
 
         # lambda_lasso and lambda_ridge from gamma
         lambda_lasso[:,] = np.sqrt(np.random.gamma(p+nInteractors, 1+(1/tau_vector).sum()/2))
-        lambda_ridge[:,] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+0.001)+0.1)
+        lambda_ridge[:,] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+3)+0.1)
 
         if i > iBurn:
             beta_posterior[ii,:] = beta_estimate
@@ -1192,7 +1177,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
             s = np.random.binomial(1,Scores)
             w = 1+s+np.random.gamma(s+0.5, r+0.01)
             wY = Yimputed*w
-            wX = X.multiply(w)#(X.T*w.flatten()).T
+            wX = X.multiply(w)
             XtX = sp.sparse.csc_matrix(wX.T @ wX)
 
     impY = np.nanmean(impY,1)
@@ -1238,6 +1223,7 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     b0 = np.random.randn(1,1)
     beta_estimate = np.random.randn(1,p)
     
+    bayes_lm = pm.Model()
     impmin = np.nanmin(wY)-2
     Ymissing = np.isnan(wY)
     Ymissing_i = np.where(Ymissing)[0]
@@ -1253,7 +1239,7 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
         if nMR:
             Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]
-            XXTYMR = T.dot(Xmiss,Xmiss.T) # MNR must be np.array
+            XXTYMR = matrix_inverse(T.dot(Xmiss,Xmiss.T)) # MNR must be np.array
     
     with bayes_lm:
         if nMissing:
