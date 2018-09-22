@@ -711,7 +711,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                     #print(protein, peptide, PTMs,residue, len(PTMpositions_in_peptide))
                     PTMrow = {'Peptide #':ntotalPTMs,
                               'Parent protein':protein,
-                              'Peptide':peptide,
+                              'Peptide':peptide+';',
                               'Scaled peptide score':peptide_score,
                               'PTMed residue':PTMdResidues[residue],
                               'PTM type':PTMs[residue],
@@ -753,28 +753,10 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         else:
             print('#',q,'/',nProteins,protein,nPeptides,dof,Treatment_betas,'Found 0 PTM(s).', 'Took {:.2f} minutes.'.format(timetaken/60))            
         q += 1
-        
+    
     #Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
-    PTMids = PTMQuant[['Parent protein','PTMed residue','PTM type','PTM position in protein']].astype(str).sum(axis=1)
-    PTMQuant_cleaned = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
-    SubjectLevelPTMQuant_cleaned = pd.DataFrame(columns = SubjectLevelColumnNames)
-    for i in PTMids:
-        ptm_finder = PTMids.isin([i])
-        if np.sum(ptm_finder) > 1:
-            ptms = PTMQuant.loc[ptm_finder,:]
-            ptmssubject = SubjectLevelPTMQuant.loc[ptm_finder,:]
-            PTMrow = ptms.mean(axis=0, numeric_only = True) #collapse all summary values to averages
-            PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = True) #collapse all subject values to averages
-            PTMSEs = np.sqrt((ptms.iloc[:,9+nGroups:9+nGroups*2].values**2).sum(axis=0)) #collapse summary errors by square-root of sum of squared errors
-            PTMrow.iloc[:,9+nGroups:9+nGroups*2] = PTMSEs
-            PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
-            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
-        else:
-            PTMrow = PTMQuant.loc[ptm_finder,:]
-            PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
-            PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
-            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
-            
+    PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
+    
     return ProteinQuant, PTMQuant_cleaned, SubjectLevelProteinQuant, SubjectLevelPTMQuant_cleaned, models
 
 # Use PyMC3 to fit a single model for the entire dataset - very computationally intensive
@@ -917,29 +899,42 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
         subjectLevelQuant = np.reshape(subjectLevelQuant,(-1,nRuns),order='F')
         SubjectLevelProteinQuant = pd.DataFrame(subjectLevelQuant, columns = SubjectLevelColumnNames)
 
-    #Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
+    PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
+
+    return ProteinQuant,PTMQuant_cleaned,SubjectLevelProteinQuant,SubjectLevelPTMQuant_cleaned,models
+
+#Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
+def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
+    
     PTMids = PTMQuant[['Parent protein','PTMed residue','PTM type','PTM position in protein']].astype(str).sum(axis=1)
-    PTMQuant_cleaned = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
-    SubjectLevelPTMQuant_cleaned = pd.DataFrame(columns = SubjectLevelColumnNames)
-    for i in PTMids:
+    PTMQuant_cleaned = pd.DataFrame(columns = PTMQuant.columns)
+    SubjectLevelPTMQuant_cleaned = pd.DataFrame(columns = SubjectLevelPTMQuant.columns)
+    
+    for i in PTMids.unique():
         ptm_finder = PTMids.isin([i])
         if np.sum(ptm_finder) > 1:
             ptms = PTMQuant.loc[ptm_finder,:]
             ptmssubject = SubjectLevelPTMQuant.loc[ptm_finder,:]
-            PTMrow = ptms.mean(axis=0, numeric_only = True) #collapse all summary values to averages
+            PTMrow = ptms.mean(axis=0, numeric_only = True).T #collapse all summary values to averages
+            PTMrow['Peptide'] = ptms['Peptide'].astype(str).sum() #list peptides used
+            PTMrow['PTM position in peptide'] = list(ii for ii in ptms['PTM position in peptide'].astype(str)) #list peptides used
+            PTMrow['Parent protein'] = ptms['Parent protein'].iloc[0]
+            PTMrow['PTMed residue'] = ptms['PTMed residue'].iloc[0]
+            PTMrow['PTM type'] = ptms['PTM type'].iloc[0]
+            PTMrow['PTM position in protein'] = ptms['PTM position in protein'].iloc[0]
             PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = True) #collapse all subject values to averages
             PTMSEs = np.sqrt((ptms.iloc[:,9+nGroups:9+nGroups*2].values**2).sum(axis=0)) #collapse summary errors by square-root of sum of squared errors
-            PTMrow.iloc[:,9+nGroups:9+nGroups*2] = PTMSEs
+            PTMrow[['{SE}' in i for i in PTMrow.index]] = PTMSEs
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
         else:
-            PTMrow = PTMQuant.loc[ptm_finder,:]
+            PTMrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
             PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
-            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
-
-    return ProteinQuant,PTMQuant_cleaned,SubjectLevelProteinQuant,SubjectLevelPTMQuant_cleaned,models
-  
+            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)  
+            
+    return PTMQuant_cleaned, SubjectLevelPTMQuant_cleaned
+ 
 # Create design matrix for Treatment + Peptide + Treatment*Peptide + additional user-specified main and interaction effects.
 def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'protein'):
     
