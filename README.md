@@ -1,5 +1,6 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
+BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
 ## Additonal features over BayesENproteomics Matlab implementation:
   1. User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
