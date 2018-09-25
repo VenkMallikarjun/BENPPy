@@ -68,34 +68,37 @@ class BayesENproteomics:
             if np.any(protein_info_idx):
                 protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
                 protein_info = protein_info.append(protein_ids.iloc[0,:])
+                
         self.protein_summary_quant = pd.concat((protein_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
-
-        protein_list = list(PTM_summary_quant.iloc[:,1].values.flatten())
-        protein_info = pd.DataFrame(columns = UniProt.columns[[0,2,-2]])
-        for protein in protein_list:
-            protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
-            if np.any(protein_info_idx):
-                protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
-                protein_info = protein_info.append(protein_ids.iloc[0,:])
-        self.PTM_summary_quant = pd.concat((PTM_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
-
-        # Empirical Bayes variance correction
-        self.protein_summary_quant = EBvar(self.protein_summary_quant)[0]
-        self.PTM_summary_quant = EBvar(self.PTM_summary_quant)[0]
-        self.protein_subject_quant = protein_subject_quant
-        self.PTM_subject_quant = PTM_subject_quant
+        self.protein_summary_quant = EBvar(self.protein_summary_quant)[0] # Empirical Bayes variance correction
         self.protein_summary_quant.to_csv(self.output_name+'\\protein_summary_quant.csv', encoding='utf-8', index=False,header=self.protein_summary_quant.columns)
+        self.protein_subject_quant = protein_subject_quant
         self.protein_subject_quant.to_csv(self.output_name+'\\protein_subject_quant.csv', encoding='utf-8', index=False,header=self.protein_subject_quant.columns)
-        self.PTM_summary_quant.to_csv(self.output_name+'\\PTM_summary_quant.csv', encoding='utf-8', index=False,header=self.PTM_summary_quant.columns)
-        self.PTM_subject_quant.to_csv(self.output_name+'\\PTM_subject_quant.csv', encoding='utf-8', index=False,header=self.PTM_subject_quant.columns)
-        
+
+        if PTM_summary_quant.shape[0] > 0:
+            protein_list = list(PTM_summary_quant.iloc[:,1].values.flatten())
+            protein_info = pd.DataFrame(columns = UniProt.columns[[0,2,-2]])
+            for protein in protein_list:
+                protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
+                if np.any(protein_info_idx):
+                    protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
+                    protein_info = protein_info.append(protein_ids.iloc[0,:])
+                    
+            self.PTM_summary_quant = pd.concat((PTM_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
+            self.PTM_summary_quant = EBvar(self.PTM_summary_quant)[0] # Empirical Bayes variance correction
+            self.PTM_summary_quant.to_csv(self.output_name+'\\PTM_summary_quant.csv', encoding='utf-8', index=False,header=self.PTM_summary_quant.columns)
+            self.PTM_subject_quant = PTM_subject_quant
+            self.PTM_subject_quant.to_csv(self.output_name+'\\PTM_subject_quant.csv', encoding='utf-8', index=False,header=self.PTM_subject_quant.columns)
+
+                        
         # Pathway quantification: fit pathway models
         pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant, self.UniProt, organism, longtable, nRuns, False, self.protein_subject_quant)
-        pathway_summary_quant = EBvar(pathway_summary_quant)[0]
-        self.pathway_summary_quant = pathway_summary_quant
+        if pathway_summary_quant.shape[0] > 0:
+            pathway_summary_quant = EBvar(pathway_summary_quant)[0] # Empirical Bayes variance correction
+            self.pathway_summary_quant = pathway_summary_quant
+            self.pathway_summary_quant.to_csv(self.output_name+'\\pathway_summary_quant.csv', encoding='utf-8', index=False,header=self.pathway_summary_quant.columns)
+
         self.Reactome = Reactome     
-        
-        self.pathway_summary_quant.to_csv(self.output_name+'\\pathway_summary_quant.csv', encoding='utf-8', index=False,header=self.pathway_summary_quant.columns)
         self.Reactome.to_csv(self.output_name+'\\Reactome.csv', encoding='utf-8', index=False,header=self.Reactome.columns)
     
     # Load exproted BayeENproteomics object from 'output_name' folder made during its creation
@@ -235,7 +238,8 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     u2r_protein_id = pd.DataFrame({'Entry name':['']*uniprot2reactomedf.shape[0]}) #columns = ['Entry name'])
     for uniprotID in list(uniprotall.iloc[:,0].values.flatten()):
         u2r_protein_finder = uniprot2reactomedf.iloc[:,0].isin([uniprotID])
-        if np.any(u2r_protein_finder):
+        protein_list_finder = models['Entry'].isin([uniprotID])
+        if np.any(u2r_protein_finder) and np.any(protein_list_finder):
             name = uniprotall.loc[uniprotall.iloc[:,0].isin([uniprotID])]['Entry name'].iloc[0]
             u2r_protein_id.loc[u2r_protein_finder] = name
             print('Pathways found for', name)
@@ -397,15 +401,14 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     pepID_fdr = bhfdr(pepID_p)
     #e_peplist = pd.concat([header,e_peplist.iloc[3:,:].loc[pepID_fdr < scorethreshold,:]])
     if othermains_bypeptide != '':
-        e_mainpeptideeffects = pd.concat([e_mainpeptideeffects,e_peplist['Unnamed: 10']],axis=1)
+        e_mainpeptideeffects = pd.concat([e_mainpeptideeffects,e_peplist['Accession']],axis=1)
         e_mainpeptideeffects = e_mainpeptideeffects.loc[pepID_fdr < scorethreshold,:]
-        e_mainpeptideeffects = e_mainpeptideeffects.sort_values(by=['Unnamed: 10'])
-        print(e_mainpeptideeffects.shape)
+        e_mainpeptideeffects = e_mainpeptideeffects.sort_values(by=['Accession'])
     
     # Initial check of reviewed status of each protein in dataset
     # Create unique (sequence and mods) id for each peptide
     e_peplist = e_peplist.iloc[2:,:].loc[pepID_fdr < scorethreshold,:]
-    e_peplist = e_peplist.sort_values(by=['Unnamed: 10'])
+    e_peplist = e_peplist.sort_values(by=['Accession'])
     e_length = e_peplist.shape[0]
     gene_col = 6
     ii = 0
@@ -443,7 +446,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         ii = ii + int(np.sum(protein_find))
 
     #e_peplist = pd.concat([header,e_peplist.iloc[2:,:].sort_values(by=['Unnamed: 7'])])
-    e_peplist = e_peplist.sort_values(by=['Unnamed: 7'])
+    e_peplist = e_peplist.sort_values(by=['Score'])
 
     # Do normalisation to median intensities of specified peptides
     e_peplist.iloc[:,RA:] = np.log2(e_peplist.iloc[:,RA:].astype(float))
@@ -508,7 +511,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
                     pep_info.loc[:,pep_info.columns[[10,6]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1)))
                     pep_info.iloc[:,0] = ['reviewed']*nP
                     pep_info.iloc[:,3] = np.array(np.tile(new_protein_seq,(nP,1)))
-                    final_peplist.loc[pep_find,final_peplist.columns[[10,gene_col]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1)))
+                    e_peplist.loc[pep_find,e_peplist.columns[[10,gene_col]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1))) #Record which entries have been altered
         
         protein_names = pep_info.iloc[:,gene_col+int(not ProteinGrouping)*4]
         if len(np.unique(protein_names)) > 1:
@@ -531,10 +534,10 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         q = final_peplist.shape[0]+2
         
     final_peplist = final_peplist.iloc[0:q-1,:]
-    final_peplist = final_peplist.sort_values(by=['Unnamed: 2'])
+    final_peplist = final_peplist.sort_values(by=['Charge'])
     if othermains_bypeptide != '':
         final_pepmaineffectlist = final_pepmaineffectlist.iloc[0:q-1,:]
-        final_pepmaineffectlist = final_pepmaineffectlist.sort_values(by=['Unnamed: 10'])
+        final_pepmaineffectlist = final_pepmaineffectlist.sort_values(by=['Accession'])
     missing_idx = np.isnan(final_peplist.iloc[:,RA:].astype(float))
 
     # Setup long-form table for fitting regression model
@@ -901,7 +904,7 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
 
     PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
 
-    return ProteinQuant,PTMQuant_cleaned,SubjectLevelProteinQuant,SubjectLevelPTMQuant_cleaned,models
+    return ProteinQuant,PTMQuant_cleaned,SubjectLevelProteinQuant.astype(float),SubjectLevelPTMQuant_cleaned.astype(float),models
 
 #Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
 def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
@@ -918,17 +921,20 @@ def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
             PTMrow = ptms.mean(axis=0, numeric_only = True).T #collapse all summary values to averages
             PTMrow['Peptide'] = ptms['Peptide'].astype(str).sum() #list peptides used
             PTMrow['PTM position in peptide'] = list(ii for ii in ptms['PTM position in peptide'].astype(str)) #list peptides used
+            PTMrow['Peptide #'] = list(ii for ii in ptms['Peptide #'].astype(str))
             PTMrow['Parent protein'] = ptms['Parent protein'].iloc[0]
             PTMrow['PTMed residue'] = ptms['PTMed residue'].iloc[0]
             PTMrow['PTM type'] = ptms['PTM type'].iloc[0]
             PTMrow['PTM position in protein'] = ptms['PTM position in protein'].iloc[0]
-            PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = True) #collapse all subject values to averages
+            PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = False) #collapse all subject values to averages
             PTMSEs = np.sqrt((ptms.iloc[:,9+nGroups:9+nGroups*2].values**2).sum(axis=0)) #collapse summary errors by square-root of sum of squared errors
             PTMrow[['{SE}' in i for i in PTMrow.index]] = PTMSEs
+            PTMrow[['{EB t-test p-value}' in i for i in PTMrow.index]] = 1
+            PTMrow[['{BHFDR}' in i for i in PTMrow.index]] = 1
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
         else:
-            PTMrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
+            PTMrow = PTMQuant.loc[ptm_finder,:]
             PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)  
@@ -1069,6 +1075,15 @@ def getUniprotdata(species):
 
     return updf, upcol
 
+# Import peptide tables from list 'peplist' consisting of a list of MaxQuant peptide .csv tables and associated modification tables
+def MaxQuant2BENP(peplists):
+    print('Importing',peplists,'peptide list: ')
+    pepdf = []
+    for peplist in range(len(peplists)):
+        pepdf[peplist] = pd.read_csv(peplist[peplist])
+        #MORE FORMATTING TO DO HERE
+    return pepdf 
+
 # Import peptide tables from peplist, a Progenesis QI formatted .csv file
 def Progenesis2BENP(peplist):
     # import normalisation peptidelist
@@ -1104,7 +1119,7 @@ def Progenesis2BENP(peplist):
             #print('=')
 
         print(n-2,' peptide (ion)s')
-        pepdf = pd.read_csv(peplist)
+        pepdf = pd.read_csv(peplist,header = 2)
         return pepdf, GroupNames, runs, RAind, n-2,nRuns
 
 # Weighted Bayesian regression function not typically called by user
