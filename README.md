@@ -10,7 +10,8 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   2. Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
   3. No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
   4. Option to utilise PyMC3-based NUTS sampler to fit a single customised model to an entire dataset (as opposed to protein-specific models currently implemented), allowing the use of shared peptides (at the cost of very high RAM and CPU requirements).
-  5. MaxQuant compatibility.
+  5. Additional MaxQuant compatibility.
+  6. Option to use Bayes Factors instead of p-values, if desired.
 
 ## Usage
 [instructions here]
