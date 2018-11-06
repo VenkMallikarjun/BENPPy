@@ -15,13 +15,17 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   * Option to use Bayes Factors instead of p-values, if desired.
   
 ## Required libraries
-BENPPy is tested on Python 3.6 and requires [PyMC3](https://docs.pymc.io/).
- - Both BENPPy and PyMC3 also have the following dependencies:
+BENPPy is tested on Python 3.6 and requires [PyMC3](https://docs.pymc.io/). Both BENPPy and PyMC3 also have the following dependencies:
    - NumPy
    - SciPy
    - Pandas
    - Matplotlib
    - [Theano](http://deeplearning.net/software/theano/)
+
+## Installation
+BENPPy only consists of a single file (BayesENproteomics.py) which can be placed in your current working directory and imported via:
+
+`import BayesENproteomics as benp`
 
 ## Usage
 [instructions here]
