@@ -6,12 +6,22 @@ BayesENproteomics fits user-specified regression models of arbitrary complexity 
 The initial proof-of-concept is described in our [preprint](https://www.biorxiv.org/content/early/2018/05/10/295527).
 
 ## Additonal features over BayesENproteomics Matlab implementation:
-  1. User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
-  2. Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
-  3. No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
-  4. Option to utilise PyMC3-based NUTS sampler to fit a single customised model to an entire dataset (as opposed to protein-specific models currently implemented), allowing the use of shared peptides (at the cost of very high RAM and CPU requirements).
-  5. Additional MaxQuant compatibility.
-  6. Option to use Bayes Factors instead of p-values, if desired.
+  * User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
+  * Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
+  * No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
+  * Option to utilise PyMC3-based NUTS sampler to fit a single customised model to an entire dataset (as opposed to the default option to fit protein-specific models), allowing the use of shared peptides (at the cost of very high RAM and CPU requirements).
+  * MaxQuant compatibility.
+  * Control group error propagation when calculating significance, if desired.
+  * Option to use Bayes Factors instead of p-values, if desired.
+  
+## Required libraries
+BENPPy is tested on Python 3.6 and requires the following libraries: 
+ - numpy
+ - scipy
+ - pandas
+ - matplotlib
+ - [pymc3](https://docs.pymc.io/)
+ - [theano](http://deeplearning.net/software/theano/)
 
 ## Usage
 [instructions here]
