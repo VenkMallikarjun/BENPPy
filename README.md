@@ -15,13 +15,13 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   * Option to use Bayes Factors instead of p-values, if desired.
   
 ## Required libraries
-BENPPy is tested on Python 3.6 and requires the following libraries: 
- - numpy
- - scipy
- - pandas
- - matplotlib
- - [pymc3](https://docs.pymc.io/)
- - [theano](http://deeplearning.net/software/theano/)
+BENPPy is tested on Python 3.6 and requires [PyMC3](https://docs.pymc.io/).
+ - Both BENPPy and PyMC3 also have the following dependencies:
+   - NumPy
+   - SciPy
+   - Pandas
+   - Matplotlib
+   - [Theano](http://deeplearning.net/software/theano/)
 
 ## Usage
 [instructions here]
