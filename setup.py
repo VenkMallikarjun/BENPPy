@@ -27,7 +27,7 @@ configuration = {
     'maintainer' : 'Venkatesh Mallikarjun',
     'maintainer_email' : 'vjmallikarjun@gmail.com',
     'license' : 'BSD',
-    'packages' : ['BENPPy'],
+    #'packages' : ['BENPPy'],
     'install_requires': ['pymc3'],
     'ext_modules' : [],
     'cmdclass' : {},
