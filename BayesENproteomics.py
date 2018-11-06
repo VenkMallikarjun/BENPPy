@@ -303,8 +303,8 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
             
         if nsites < 5 or nprot2 < 5:
             continue
-        
-        abundances = FCcolumns[(ProteinsInPathway2[:,i] > 0).flatten(),:].flatten()
+
+        abundances = np.array(FCcolumns)[(ProteinsInPathway2[:,i] > 0).flatten(),:].flatten()
         treatments = np.tile(t1,(a*nprot,1)).flatten()
         SEs = np.minimum(1,abs(abundances/np.array(SEcolumns[(ProteinsInPathway2[:,i] > 0).flatten(),:]).flatten()))[:,np.newaxis]
         pathway_table = pd.DataFrame({'Protein':proteins,
