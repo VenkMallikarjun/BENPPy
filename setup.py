@@ -14,7 +14,6 @@ configuration = {
         'Intended Audience :: Science/Research',
         'License :: MIT',
         'Programming Language :: Python',
-        'Topic :: Software Development',
         'Topic :: Scientific/Engineering',
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX',
@@ -26,14 +25,9 @@ configuration = {
     'url' : 'https://github.com/VenkMallikarjun/BENPPy',
     'maintainer' : 'Venkatesh Mallikarjun',
     'maintainer_email' : 'vjmallikarjun@gmail.com',
-    'license' : 'BSD',
-    #'packages' : ['BENPPy'],
-    'install_requires': ['pymc3'],
-    'ext_modules' : [],
-    'cmdclass' : {},
-    'test_suite' : 'nose.collector',
-    'tests_require' : ['nose'],
-    'data_files' : ()
+    'license' : 'MIT',
+    'packages' : ['BENPPy'],
+    'install_requires': ['pymc3']
     }
 
 setup(**configuration)
