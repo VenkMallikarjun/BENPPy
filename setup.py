@@ -26,7 +26,7 @@ configuration = {
     'maintainer' : 'Venkatesh Mallikarjun',
     'maintainer_email' : 'vjmallikarjun@gmail.com',
     'license' : 'MIT',
-    'packages' : setuptools.findpackages(),
+    'packages' : setuptools.find_packages(),
     'install_requires': ['pymc3']
     }
 
