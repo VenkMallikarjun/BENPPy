@@ -26,11 +26,11 @@ BENPPy is tested on Python 3.6 and requires [PyMC3](https://docs.pymc.io/). Both
 
 Assuming a standard Python installation with pip and git, BENPPy can be installed via:
 
-`pip install git+https://github.com/VenkMallikarjun/BENPPy`
+`pip install git+https://github.com/VenkMallikarjun/BENPPy` or `pip install BENPPy`
 
 BENPPy can be imported by:
 
-`import BayesENproteomics as benp`
+`import BENPPy`
 
 ## Usage
 [instructions here]
