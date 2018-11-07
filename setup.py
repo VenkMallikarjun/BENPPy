@@ -1,4 +1,4 @@
-from setuptools import setup
+import setuptools
 
 def readme():
     with open('README.md') as readme_file:
@@ -26,8 +26,8 @@ configuration = {
     'maintainer' : 'Venkatesh Mallikarjun',
     'maintainer_email' : 'vjmallikarjun@gmail.com',
     'license' : 'MIT',
-    'packages' : ['BENPPy'],
+    'packages' : setuptools.findpackages(),
     'install_requires': ['pymc3']
     }
 
-setup(**configuration)
+setuptools.setup(**configuration)
