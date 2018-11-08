@@ -6,7 +6,7 @@ def readme():
 
 configuration = {
     'name' : 'BENPPy',
-    'version': '1.0.2',
+    'version': '1.0.3',
     'description' : 'BayesENproteomics in Python',
     'long_description' : readme(),
     'classifiers' : [
@@ -26,7 +26,7 @@ configuration = {
     'maintainer' : 'Venkatesh Mallikarjun',
     'maintainer_email' : 'vjmallikarjun@gmail.com',
     'license' : 'MIT',
-    'packages' : setuptools.find_packages(),
+    'packages' : ['BENPPy'],
     'install_requires': ['pymc3']
     }
 
