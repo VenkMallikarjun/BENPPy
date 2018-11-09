@@ -488,8 +488,9 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     if normmethod == 'median':
         normed_peps = normalise(e_peplist.iloc[:,RA:].astype(float),norm_intensities)
         normed_peps[np.isinf(normed_peps)] = np.nan
-    else:
+    elif normmethod == 'none':
         print('No normalisation used!')
+        normed_peps = e_peplist.iloc[:,RA:].astype(float)
         normed_peps[np.isinf(normed_peps)] = np.nan
     e_peplist.iloc[:,RA:] = np.array(normed_peps)
 
@@ -962,13 +963,15 @@ def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
             PTMrow['PTM position in protein'] = ptms['PTM position in protein'].iloc[0]
             PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = False) #collapse all subject values to averages
             PTMSEs = np.sqrt((ptms.iloc[:,9+nGroups:9+nGroups*2].values**2).sum(axis=0)) #collapse summary errors by square-root of sum of squared errors
-            PTMrow[['{SE}' in i for i in PTMrow.index]] = PTMSEs
-            PTMrow[['{EB t-test p-value}' in i for i in PTMrow.index]] = 1
-            PTMrow[['{BHFDR}' in i for i in PTMrow.index]] = 1
+            PTMrow[['{SE}' in ii for ii in PTMrow.index]] = PTMSEs
+            PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
+            PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
         else:
             PTMrow = PTMQuant.loc[ptm_finder,:]
+            PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
+            PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
             PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)  
