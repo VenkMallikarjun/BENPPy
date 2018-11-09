@@ -6,7 +6,7 @@ def readme():
 
 configuration = {
     'name' : 'BENPPy',
-    'version': '1.0.5',
+    'version': '1.0.7',
     'description' : 'BayesENproteomics in Python',
     'long_description' : readme(),
     'classifiers' : [
@@ -19,9 +19,9 @@ configuration = {
     ],
     'keywords' : 'proteomics PTMs MCMC',
     'url' : 'https://github.com/VenkMallikarjun/BENPPy',
-    'maintainer' : 'Venkatesh Mallikarjun',
-    'maintainer_email' : 'vjmallikarjun@gmail.com',
-    'license' : 'MIT',
+    'author' : 'Venkatesh Mallikarjun',
+    'author_email' : 'vjmallikarjun@gmail.com',
+    'license' : 'MIT License',
     'packages' : ['BENPPy'],
     'install_requires': ['pymc3']
     }
