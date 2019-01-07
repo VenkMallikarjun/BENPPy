@@ -121,6 +121,6 @@ Significance testing comparing all treatments to a single control group can be p
                              ctrl,            # Int denoting which column to use as the control group. Defaults to 0, meaning the first column.
                              propagateErrors, # Bool deonting whether to propagate control group errors into experimental group errors (using square root of sum of squares) for t-statistic calculation. Defualts to False.
                              UseBayesFactors  # Bool denoting whether to use Bayes Factors rather than p-values. Still needs testing. Defaults to False.
-                             )`
+                             )
                              
 This will add the `Contrasted` dataframe property to `new_instance` that can be inspected and manipulated by `new_instance.Contrasted`.
