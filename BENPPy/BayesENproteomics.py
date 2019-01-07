@@ -13,7 +13,6 @@ import os
 #from theano import sparse
 #import multiprocessing
 import time
-#from astropy.table import Table, Column
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -31,25 +30,37 @@ class BayesENproteomics:
         if regression_method == 'dataset':
             otherinteractors['Protein_'] = 'Treatment'
             bayeslm = fitDatasetModel
-        elif regression_method== 'protein':
+        elif regression_method == 'protein':
             bayeslm = fitProteinModels
         
-        peptides_used, longtable, missing_peptides_idx, UniProt, nGroups, nRuns = formatData(normalisation_peptides, experimental_peptides, organism, othermains_bysample, othermains_bypeptide, normalisation_method, ProteinGrouping, peptide_BHFDR, nDB, ContGroup,form = self.form)
+        peptides_used, longtable, missing_peptides_idx, UniProt, nGroups, nRuns = formatData(normalisation_peptides, experimental_peptides, organism, othermains_bysample, othermains_bypeptide, normalisation_method, ProteinGrouping, peptide_BHFDR, nDB, regression_method, ContGroup,form = self.form)
         self.peptides_used = peptides_used
         self.missing_peptides_idx = missing_peptides_idx
         self.UniProt = UniProt
         self.longtable = longtable
         
-        input_table = pd.DataFrame({'group number':nGroups,
-                                    'run number':nRuns,
-                                    'minimum peptides':pepmin,
-                                    'normalisation method':normalisation_method,
-                                    'regression method':regression_method,
-                                    'peptide FDR':peptide_BHFDR,
-                                    'organism':organism,
-                                    'experimental peptides':experimental_peptides,
-                                    'normalisation peptides':normalisation_peptides})#,
-                                    #index = [0])
+        if self.form == 'maxquant':
+            input_table = pd.DataFrame({'group number':nGroups,
+                                        'run number':nRuns,
+                                        'minimum peptides':pepmin,
+                                        'normalisation method':normalisation_method,
+                                        'regression method':regression_method,
+                                        'peptide FDR':peptide_BHFDR,
+                                        'organism':organism,
+                                        'experimental peptides':experimental_peptides,
+                                        'normalisation peptides':normalisation_peptides})
+        elif self.form == 'progenesis':
+            input_table = pd.DataFrame({'group number':nGroups,
+                                        'run number':nRuns,
+                                        'minimum peptides':pepmin,
+                                        'normalisation method':normalisation_method,
+                                        'regression method':regression_method,
+                                        'peptide FDR':peptide_BHFDR,
+                                        'organism':organism,
+                                        'experimental peptides':experimental_peptides,
+                                        'normalisation peptides':normalisation_peptides},
+                                        index = [0])
+            
         self.input_table = input_table
         
         self.peptides_used.to_csv(self.output_name+'\\peptides_used.csv', encoding='utf-8', index=False,na_rep='nan',header=peptides_used.columns)
@@ -193,6 +204,7 @@ class BayesENproteomics:
 
     #PLOTS PLOTS PLOTS PLO-PLOTS PLOTS
     def boxplots(self): 
+        # Use for fold-change outlier detection
         nG = np.array(self.input_table['group number'])[0]
         fig1, ax1 = mpl.subplots()
         mpl.boxplot(self.protein_summary_quant.iloc[:,4:4+nG].T,notch=True,labels=self.protein_summary_quant.columns[4:4+nG])
@@ -330,7 +342,10 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         
         timetaken = time.time()-start
         print('#',i,'/',x1,uniprot2reactomedf2.iloc[i,1],uniprot2reactomedf2.iloc[i,3],nprot2,dof,Treatment_betas, 'Took {:.2f} minutes.'.format(timetaken/60))            
-
+    
+    if PathwayQuant.shape[0] < 1:
+        print('0 pathways with at least 5 proteins found!')
+        
     return PathwayQuant, pathway_models, uniprot2reactomedf
 
 # Modify SE estimates and degrees of freedom as per Empirical Bayes (Smyth 2004) 
@@ -504,7 +519,8 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     
     # Setup protein matrix if whole dataset regression is to be performed
     if regression_method == 'dataset':
-        protein_columns = np.concat((pd.DataFrame(np.tile('Protein_',(uniprotall.shape[0],1))),uniprotall.iloc[:,0]),axis=1).astype(str).sum(axis=1)
+        #print(pd.DataFrame(np.tile('Protein_',(uniprotall.shape[0],1))).shape,uniprotall.iloc[:,0][:,np.newaxis].shape)
+        protein_columns = pd.concat((pd.DataFrame(np.tile('Protein_',(uniprotall.shape[0],1))),uniprotall['Entry name']),axis=1).astype(str).sum(axis=1)
         protein_matrix = pd.DataFrame(np.zeros((final_peplist.shape[0],uniprotall.shape[0])),columns = protein_columns)
     
     # Loop to reassign peptides from unreviewed proteins to reviewed ones if sequences match
@@ -564,9 +580,10 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         q = q + nP
         
     if regression_method == 'dataset':
-        npeps2prots = protein_matrix.sum(axis=1)    
+        npeps2prots = protein_matrix.sum(axis=0)    
         protein_matrix.drop(protein_matrix.columns[npeps2prots == 0],axis=1)
-        q = final_peplist.shape[0]+2
+        protein_names = protein_matrix.columns
+        q = final_peplist.shape[0]
         
     final_peplist = final_peplist.iloc[0:q-1,:]
     final_peplist = final_peplist.sort_values(by=['Charge'])
@@ -588,13 +605,13 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         e_maineffects_peptide = np.tile(np.array(['a']),((q-1)*len(runIDs),nPmains))
         for i in range(nPmains):
             e_maineffects_peptide[:,i] = np.tile(np.array(final_pepmaineffectlist.iloc[:,i]),(len(runIDs),1)).flatten(order='F')
-        e_maineffects_peptide = pd.DataFrame(e_maineffects_peptide,columns = othermains_bypeptide_names)
+        e_maineffects_peptide = pd.DataFrame(e_maineffects_peptide,columns = othermains_bypeptide_names)#.astype('category')
     if othermains_bysample != '':
         #e_maineffects_sample = np.zeros(((q-1)*len(runIDs),nSmains))
         e_maineffects_sample = np.tile(np.array(['a']),((q-1)*len(runIDs),nSmains))
         for i in range(nSmains):
             e_maineffects_sample[:,i] = np.tile(np.array(e_mainsampleeffects.iloc[:,i]),(1,(q-1))).flatten(order='F')
-        e_maineffects_sample = pd.DataFrame(e_maineffects_sample,columns = othermains_bysample_names)
+        e_maineffects_sample = pd.DataFrame(e_maineffects_sample,columns = othermains_bysample_names)#.astype('category')
     if othermains_bypeptide != '' and othermains_bysample != '':
         othermains = pd.concat([e_maineffects_sample,e_maineffects_peptide],axis=1,sort=False)
     elif othermains_bypeptide != '':
@@ -629,13 +646,17 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
                                 'Subject':subject,
                                 'Intensities':Intensities},
                                 index = list(range(q*len(runIDs)-len(runIDs))))
-        
+    
+    # convert to categorical to save memory
+    model_table[['Protein','Peptide','PeptideSequence','ProteinSequence','Treatment','Subject']] =  model_table[['Protein','Peptide','PeptideSequence','ProteinSequence','Treatment','Subject']]#.astype('category')
+    
     if othermains_bysample != '' or othermains_bypeptide != '':
         model_table = pd.concat([othermains,model_table],axis=1,sort = False)      
     
     if regression_method == 'dataset':
-        protein_matrix = np.tile(protein_matrix,(nRuns,1))
+        protein_matrix = pd.DataFrame(np.tile(protein_matrix,(nRuns,1)), columns = protein_names)
         model_table = pd.concat([protein_matrix,model_table],axis=1,sort = False)  
+        #print(model_table.columns)
         
     return final_peplist, model_table, missing_idx, uniprotall, nGroups, nRuns
 
@@ -675,19 +696,19 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         #v = 1
         #Create design matrix (only add Treatment:Peptides interactions if more than 2 peptides)
         X = designMatrix(protein_table,otherinteractors,incSubject,len(np.unique(protein_table['Peptide'])))
-        Y = np.array(protein_table.loc[:,'Intensities'])[:,np.newaxis].astype('float32')
+        Y = np.array(protein_table.loc[:,'Intensities'])[:,np.newaxis]#.astype('float32')
         if np.all(np.isnan(Y)):
             continue
         parameterIDs = X.columns
         p = ['Peptide_'+str(n) for n in list(np.unique(protein_table.loc[:,'Peptide']))]
         X_missing = X[parameterIDs.intersection(t+p)]
         missing = np.isnan(Y)
-        Y_missing = (np.sign(missing.astype(float)-0.5)*10).astype('float32')
+        Y_missing = (np.sign(missing.astype(float)-0.5)*10)#.astype('float32')
         parameterIDs_missing = X_missing.columns
         n = X_missing.shape[0]
-        X_missing = sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
-        X = sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
-        
+        X_missing = np.array(X_missing,dtype=int)#sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
+        X = np.array(X,dtype=int)#sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
+       
         # Fit missing model to choose which missing values are MNR and which are MAR
         missingmdl = weighted_bayeslm(X_missing,Y_missing,parameterIDs_missing,False,np.ones([n,1]),np.array([]),nInteractors)
         MNR = np.ravel(np.sum(np.concatenate((missingmdl['beta_estimate'] > 0, missingmdl['beta_estimate'] > missingmdl['b0']),axis=0),axis=0)) == 2
@@ -699,7 +720,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         results = proteinmdl['beta_estimate']
         SEMs = proteinmdl['SEMs']
         dof = proteinmdl['dof']
-
+        
         # Sort out protein-level effects
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
@@ -795,30 +816,31 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
     PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
     
-    return ProteinQuant, PTMQuant_cleaned, SubjectLevelProteinQuant, SubjectLevelPTMQuant_cleaned, models
+    return ProteinQuant, PTMQuant_cleaned, SubjectLevelProteinQuant.astype(float), SubjectLevelPTMQuant_cleaned.astype(float), models
 
 # Use PyMC3 to fit a single model for the entire dataset - very computationally intensive
 def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin):
     
-    t1 = list(np.unique(model_table.loc[:,'Treatment']))
+    print('Fitting dataset model...')
+    t1 = model_table.loc[:,'Treatment'].unique() #list(np.unique(model_table.loc[:,'Treatment']))
     t2 = ['Treatment_']*len(t1)
     t = [m+str(n) for m,n in zip(t2,t1)]
     nInteractors = len(otherinteractors)
     
-    protein_list = np.unique(model_table.loc[:,'Protein'])
+    protein_list = np.array(model_table.loc[:,'Protein'].unique()) #np.unique(model_table.loc[:,'Protein'])
     nProteins = len(protein_list)
     
-    X = designMatrix(model_table,otherinteractors,incSubject,len(np.unique(model_table['Peptide'])),regmethod='dataset')
-    Y = np.array(model_table.loc[:,'Intensities'])[:,np.newaxis].astype('float32')
+    X = designMatrix(model_table,otherinteractors,incSubject,len(model_table['Peptide'].unique()),regmethod='dataset')
+    Y = np.array(model_table.loc[:,'Intensities'])[:,np.newaxis]
     parameterIDs = X.columns
-    p = ['Peptide_'+str(n) for n in list(np.unique(model_table.loc[:,'Peptide']))]
+    p = ['Peptide_'+str(n) for n in model_table['Peptide'].unique()]
     X_missing = X[parameterIDs.intersection(t+p)]
     missing = np.isnan(Y)
-    Y_missing = (np.sign(missing.astype(float)-0.5)*10).astype('float32')
+    Y_missing = (np.sign(missing.astype(float)-0.5)*10)
     parameterIDs_missing = X_missing.columns
     n = X_missing.shape[0]
-    X_missing = sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
-    X = sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
+    X_missing = sp.sparse.csc_matrix(np.array(X_missing,dtype=int))
+    X = sp.sparse.csc_matrix(np.array(X,dtype=int))
     
     #Preallocate dataframes to be filled by model fitting
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
@@ -861,7 +883,7 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
     TreatmentPeptide_names = parameterIDs[np.newaxis][TreatmentPeptide_i]
 
     ntotalPTMs = 0
-    for peptide in np.unique(model_table.loc[:,'Peptide']):
+    for peptide in model_table['Peptide'].unique():
         PTMpositions_in_peptide = np.array(re.findall('\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
         if len(PTMpositions_in_peptide) > 0:
             #Get rows with mod, modded residue, modded peptideID for each peptide
@@ -947,7 +969,7 @@ def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
     PTMids = PTMQuant[['Parent protein','PTMed residue','PTM type','PTM position in protein']].astype(str).sum(axis=1)
     PTMQuant_cleaned = pd.DataFrame(columns = PTMQuant.columns)
     SubjectLevelPTMQuant_cleaned = pd.DataFrame(columns = SubjectLevelPTMQuant.columns)
-    
+
     for i in PTMids.unique():
         ptm_finder = PTMids.isin([i])
         if np.sum(ptm_finder) > 1:
@@ -964,14 +986,14 @@ def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
             PTMSubjectrow = ptmssubject.mean(axis=0, numeric_only = False) #collapse all subject values to averages
             PTMSEs = np.sqrt((ptms.iloc[:,9+nGroups:9+nGroups*2].values**2).sum(axis=0)) #collapse summary errors by square-root of sum of squared errors
             PTMrow[['{SE}' in ii for ii in PTMrow.index]] = PTMSEs
-            PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
-            PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
+            #PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
+            #PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
         else:
             PTMrow = PTMQuant.loc[ptm_finder,:]
-            PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
-            PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
+            #PTMrow[('{EB t-test p-value}' in ii for ii in PTMrow.columns)] = 1
+            #PTMrow[('{BHFDR}' in ii for ii in PTMrow.columns)] = 1
             PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
             PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
             SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)  
@@ -988,7 +1010,7 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
         X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject'])!=True]
     
     if regmethod == 'dataset':
-        protein_effects = effectFinder(X_table, 'Protein_')
+        protein_effects = effectFinder(X_table.columns, 'Protein_')
         X_main = pd.get_dummies(X_table.loc[:,protein_effects != True])
         X_main = pd.concat((X_table.loc[:,protein_effects],X_main),axis=1,sort = False)
     else:
@@ -1206,7 +1228,6 @@ def Progenesis2BENP(peplist):
 
 # Weighted Bayesian regression function not typically called by user
 # MNR must by boolean numpy array!!
-        
 def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     wX = dc(X)
     [n,p] = wX.shape
@@ -1217,20 +1238,20 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     iNumIter = 1000
     iBurn = 500
 
-    tau_vector = np.random.rand(p)
-    D_tau_squared = sp.sparse.csc_matrix(np.diag(tau_vector.flatten()))
+    tau_vector = np.random.rand(1,p)
+    D_tau_squared = np.diag(tau_vector.flatten())
 
-    XtX = sp.sparse.csc_matrix(X.T @ X)
-    w = np.ones((n,1),dtype=np.float32)
+    XtX = X.T @ X
+    w = np.ones((n,1))
     sigma2_shape = (n-1+p)/2;
     beta_posterior = np.zeros((iNumIter-iBurn,p))
     intercept = np.zeros((iNumIter-iBurn,1))
-    beta_estimate = np.random.randn(1,p)
+    #beta_estimate = np.random.randn(1,p)
     b0 = np.random.randn(1,1)
     sigma_squared = np.zeros((iNumIter-iBurn,1))
     sigma2 = 1/np.random.gamma(sigma2_shape, 0.01)
-    lambda_lasso = np.array(np.sqrt(np.random.gamma(p,1,(p))))
-    lambda_ridge = np.array(np.random.gamma(1,1/3,(p)))
+    lambda_lasso = np.array(np.sqrt(np.random.gamma(p,1,(1,p))))
+    lambda_ridge = np.array(np.random.gamma(1,1/3,(1,p)))
     DoF = np.zeros((iNumIter-iBurn,1))
 
     # Imputation variables
@@ -1246,14 +1267,16 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     if nMissing:
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
         if nMR:
-            Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:].toarray()    # MNR must be np.array
-            try:
-                XXTYMR = np.linalg.inv((Xmiss @ Xmiss.T)*np.eye(nMR)) 
-                np.linalg.cholesky(XXTYMR)
-            except:
-                nMR = False # If inv fails probably means there are too many missing values -> protein is low abundance -> use MNR imputation
-                MNR = np.array([True for i in MNR])
-                nMNR = nMissing
+            Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]   # MNR must be np.array
+            #if nMR/n < 0.9:
+            #try:
+            XXTYMR = sp.linalg.inv((Xmiss @ Xmiss.T)*np.eye(nMR)) 
+                #np.linalg.cholesky(XXTYMR)
+            #else:
+            #except:
+            #    nMR = False # If inv fails probably means there are too many missing values -> protein is low abundance -> use MNR imputation
+            #    MNR = np.array([True for i in MNR])
+            #    nMNR = nMissing
        
     ii = 0
     for i in range(iNumIter+1):
@@ -1267,32 +1290,34 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
                 B = sigma2*XXTYMR
                 #D = b0 + Xmiss @ beta_estimate.T #np.ndarray.flatten(np.concatenate((X0[Ymissing_i[np.where(MNR == False)[0]],:],Xmiss),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T.flatten())
                 #D = np.array([x for y in D for x in y]).ravel() #FUCK ME, WHY IS IT IMPOSSIBLE TO FLATTEN D??????!!!!!!!!
-                wY[Ymissing_i[np.where(MNR == False)[0]]] = (w[Ymissing_i[np.where(MNR == False)[0]]].T*np.random.multivariate_normal(D,B)).T
+                wY[Ymissing_i[np.where(MNR == False)[0]]] = (w[Ymissing_i[np.where(MNR == False)[0]]].T*mvn(D,B)).T
             
             Yimputed[Ymissing] = wY[Ymissing]/w[Ymissing]
 
         # beta_estimate from conditional multivariate_normal
-        L = sp.sparse.csc_matrix(np.diag((lambda_ridge+tau_vector).ravel()))
-        L = sp.sparse.linalg.inv(XtX+L)
-        C = L.multiply(sigma2)
+        #L = sp.sparse.csc_matrix(np.diag((lambda_ridge+tau_vector).ravel()))
+        #L = sp.sparse.linalg.inv(XtX+L)
+        L = sp.linalg.inv(np.diag((lambda_ridge+tau_vector).ravel())+XtX)
+        C = L*sigma2
+        #C = L.multiply(sigma2)
         A = np.ndarray.flatten(L @ (wX.T @ wY))
-        beta_estimate = np.random.multivariate_normal(A,C.toarray())[np.newaxis]
+        beta_estimate = mvn(A,C).ravel()#[np.newaxis]
         b0 = sigma2*np.random.randn(1,1)+np.nanmean(Yimputed)
 
         # sigma**2 from inverse gamma
-        residuals = Yimputed - (b0 + X @ beta_estimate.T) #np.concatenate((X0,X),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T
-        sigma2_scale = (residuals.T @ residuals)/2 + ((sp.sparse.linalg.inv(D_tau_squared) @ (beta_estimate*lambda_lasso).T).T @ beta_estimate.T)/2 + ((beta_estimate*lambda_ridge) @ beta_estimate.T)/2
+        residuals = Yimputed - (b0 + X @ beta_estimate[:,np.newaxis]) #np.concatenate((X0,X),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T
+        sigma2_scale = (residuals.T @ residuals)/2 + ((sp.linalg.inv(D_tau_squared) @ (beta_estimate*lambda_lasso).T).T @ beta_estimate.T)/2 + ((beta_estimate*lambda_ridge) @ beta_estimate.T)/2
         sigma2 = 1/np.random.gamma(sigma2_shape,1/(sigma2_scale+0.01) + 0.01) #Change to .ravel() ??
  
         # 1/tau**2 from IG
         tau2_shape = np.sqrt(lambda_lasso**2/beta_estimate**2*sigma2)
         tau2_scale = lambda_lasso**2
-        tau_vector = np.random.wald(tau2_shape,tau2_scale)
-        D_tau_squared = sp.sparse.csc_matrix(np.diag(tau_vector.ravel()))
+        tau_vector[0,:] = np.random.wald(tau2_shape,tau2_scale)
+        D_tau_squared = np.diag(tau_vector.ravel())
 
         # lambda_lasso and lambda_ridge from gamma
-        lambda_lasso[:,] = np.sqrt(np.random.gamma(p+nInteractors, 1+(1/tau_vector).sum()/2))
-        lambda_ridge[:,] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+3)+0.01)
+        lambda_lasso[0,:] = np.sqrt(np.random.gamma(p+nInteractors, 1+(1/tau_vector).sum()/2))
+        lambda_ridge[0,:] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+3)+0.01)
 
         if i > iBurn:
             beta_posterior[ii,:] = beta_estimate
@@ -1307,8 +1332,8 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
             s = np.random.binomial(1,Scores)
             w = 1+s+np.random.gamma(s+0.5, r+0.01)
             wY = Yimputed*w
-            wX = X.multiply(w)
-            XtX = sp.sparse.csc_matrix(wX.T @ wX)
+            wX = X*w
+            XtX = wX.T @ wX
 
     impY = np.nanmean(impY,1)
     Yimputed[Ymissing] = impY
@@ -1349,7 +1374,7 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     wX = dc(X)
     wY = dc(Y)
     Yimputed = dc(Y)
-    w = np.ones((n,1),dtype=np.float32)
+    w = np.ones((n,1))
     b0 = np.random.randn(1,1)
     beta_estimate = np.random.randn(1,p)
     
@@ -1418,6 +1443,12 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
         
     return bayes_lm,trace
 
+def mvn(mean, cov):
+    L = sp.linalg.cholesky(cov,check_finite=False)     
+    Z = np.random.normal(size = mean.shape)
+    
+    return Z.dot(L) + mean
+    
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
