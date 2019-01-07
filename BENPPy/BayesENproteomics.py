@@ -200,7 +200,7 @@ class BayesENproteomics:
             
         self.Contrasted.iloc[:,['fold change}' in i for i in self.Contrasted.columns]] = FCs
         self.Contrasted.iloc[:,['{SE}' in i for i in self.Contrasted.columns]] = SEs
-            
+        self.Contrasted.to_csv(self.output_name+'\\Contrasted_vs_Col'+str(ctrl)+'.csv', encoding='utf-8', index=False,header=self.Contrasted.columns)
 
     #PLOTS PLOTS PLOTS PLO-PLOTS PLOTS
     def boxplots(self): 
