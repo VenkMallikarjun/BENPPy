@@ -65,6 +65,7 @@ Depending on your installation, you may need to specify the environment vabiable
                             ContGroup,              # Bool denoting whether treatment variable specified in experimental_peptides headers is treated as a single continuous variable rather than multiple levels of a categorical variable. Defaults to False.
                             )
 
+
 * If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant modificationSpecificPeptides.txt first and any [PTM]Sites.txt (E.g. `['modificationSpecificPeptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of modificationSpecificPeptides.txt.
 
 #### 2.1 Customised models
@@ -84,13 +85,42 @@ These basic models can be extended by the user as desired by the `othermains_bys
 
 BENPPy will perform both protein-, PTM- (if PTMs are in your dataset) and pathway-level quantification, exporting the respective results as .csv files as each step finishes.
 
+
 ### 3. Inspect results:
 
 After `doAnalysis` finishes there will be several new properties added to the instance created in step 1 (and exported as .csv files to the folder specified by `output_name`).
 
-`new_instance`
+#### Preliminary analysis properties - input data
+* `new_instance.input_table` provides information about parameters used in analysis.
+* `new_instance.peptides_used` lists peptides that were used in subsequent analysis.
+* `new_instance.missing_peptides_idx` Boolean array denoting where missing values are.
+* `new_instance.UniProt` UniProt database used at time of analysis.
+* `new_instance.longtable` long-form vector table used in creation of design matrices.
+
+#### Summary fold changes
+* `new_instance.protein_summary_quant` protein-level log2 fold changes.
+* `new_instance.ptm_summary_quant` ptm-level log2 fold changes.
+* `new_instance.pathway_summary_quant` pathway-level log2 fold changes.
+
+#### Subject-level quantifications
+
+If `subQuantadd` arguement is used when `doAnalysis` is called, protein and ptm subject/run-level quantification will be provided in `new_instance.protein_subject_quant` and `new_instance.ptm_subject_quant`, respectively.
 
 ### 4. Quality-control plots:
-[Soon]
+
+* `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) may improve overfitting.
+
 
 ### 5. Contrasts and significance testing
+
+Significance testing comparing all treatments to a single control group can be performed using `new_instance.doContrasts()` as follows:
+
+::
+
+    new_instance.doContrasts(Contrasted,      # String denoting which contrasts to test. Can be either 'protein', 'ptm'or 'pathway'. Defaults to 'protein'.
+                             ctrl,            # Int denoting which column to use as the control group. Defaults to 0, meaning the first column.
+                             propagateErrors, # Bool deonting whether to propagate control group errors into experimental group errors (using square root of sum of squares) for t-statistic calculation. Defualts to False.
+                             UseBayesFactors  # Bool denoting whether to use Bayes Factors rather than p-values. Still needs testing. Defaults to False.
+                             )`
+                             
+This will add the `Contrasted` dataframe property to `new_instance` that can be inspected and manipulated by `new_instance.Contrasted`.
