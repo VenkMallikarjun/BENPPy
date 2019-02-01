@@ -108,7 +108,7 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, protein and ptm 
 
 ### 4. Quality-control plots:
 
-* `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) may improve overfitting.
+* `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
 
 
 ### 5. Contrasts and significance testing
