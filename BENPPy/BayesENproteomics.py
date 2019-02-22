@@ -253,7 +253,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
         species = response.read().decode('utf-8')
-        species = re.search('<title>(\w+ \w+) (',species)
+        species = re.search(r'<title>(\w+ \w+) (',species)
             
     uniprot2reactomedf = pd.read_table("UniProt2Reactome.txt",header=None)
     uniprot2reactomedf = uniprot2reactomedf.loc[uniprot2reactomedf.iloc[:,-1].isin([species]),:].reset_index(drop=True)
@@ -446,7 +446,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     #header = e_peplist.iloc[0:1,:];
     if form == 'progenesis':
         e_length = e_peplist.shape[0]
-        scores = e_peplist.iloc[2:,7]
+        scores = np.array(e_peplist.iloc[2:,7], dtype = object)
         scores[scores == '---'] = np.nan #Progenesis-specific
         #print(np.array(scores, dtype=float))
         scorebf = (np.log10(1/(20*(e_length - 2))) * -10) - 13 #Specific to Mascot scores
@@ -601,7 +601,10 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         q = final_peplist.shape[0]
         
     final_peplist = final_peplist.iloc[0:q-1,:]
-    final_peplist = final_peplist.sort_values(by=['Charge'])
+    try:
+        final_peplist = final_peplist.sort_values(by=['Charge'])
+    except:
+        final_peplist = final_peplist.sort_values(by=['Ions'])
     if othermains_bypeptide != '':
         final_pepmaineffectlist = final_pepmaineffectlist.iloc[0:q-1,:]
         final_pepmaineffectlist = final_pepmaineffectlist.sort_values(by=['Accession'])
@@ -751,11 +754,11 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
 
         ntotalPTMs = 0
         for peptide in np.unique(protein_table.loc[:,'Peptide']):
-            PTMpositions_in_peptide = np.array(re.findall('\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
+            PTMpositions_in_peptide = np.array(re.findall(r'\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
             if len(PTMpositions_in_peptide) > 0:
                 #Get rows with mod, modded residue, modded peptideID for each peptide
                 PTMdResidues = [peptide[i] for i in PTMpositions_in_peptide]
-                PTMs = re.findall('(?<=] )\S+',peptide)
+                PTMs = re.findall(r'(?<=] )\S+',peptide)
                 peptide_finder = protein_table.loc[:,'Peptide'].isin([peptide])
                 parent_protein_sequnce = protein_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
                 peptide_sequence = protein_table.loc[peptide_finder,'PeptideSequence'].iloc[0]
@@ -909,11 +912,11 @@ def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,
 
     ntotalPTMs = 0
     for peptide in model_table['Peptide'].unique():
-        PTMpositions_in_peptide = np.array(re.findall('\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
+        PTMpositions_in_peptide = np.array(re.findall(r'\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
         if len(PTMpositions_in_peptide) > 0:
             #Get rows with mod, modded residue, modded peptideID for each peptide
             PTMdResidues = [peptide[i] for i in PTMpositions_in_peptide]
-            PTMs = re.findall('(?<=] )\S+',peptide)
+            PTMs = re.findall(r'(?<=] )\S+',peptide)
             peptide_finder = model_table.loc[:,'Peptide'].isin([peptide])
             #parent_protein = model_table.loc[peptide_finder,'Protein'][0]
             parent_protein_sequnce = model_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
@@ -1594,7 +1597,8 @@ def pymc3_weightedbayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
         
         if do_weights:
             r = 1/(0.1+residuals**2/2/sigma2)+0.00001
-            s = np.random.binomial(1,Scores)#s = pm.Binomial('s',n=1,p=scores,shape=(n,1))
+            #s = np.random.binomial(1,Scores)#
+            s = pm.Multinomial('s',n=1,p=np.array([Scores,1-Scores]).squeeze().T,shape=(n,1))
             w = 1+s+pm.Gamma('w',alpha=0.5+s, beta=r,shape=(n,1))
             wY = Yimputed*w
             wX = X*w
