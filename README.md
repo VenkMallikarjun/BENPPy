@@ -124,3 +124,8 @@ Significance testing comparing all treatments to a single control group can be p
                              )
                              
 This will add the `Contrasted` dataframe property to `new_instance` that can be inspected and manipulated by `new_instance.Contrasted`.
+
+
+### 6. Load previous analysis
+
+A previous BayesENproteomics instance (we'll stick with our example, `new_instance`) can be loaded using `new_instance.load()`, provided that `new_instance` is defined as in step 1.
