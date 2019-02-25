@@ -65,7 +65,7 @@ class BayesENproteomics:
         self.input_table = input_table
         
         self.peptides_used.to_csv(self.output_name+'\\peptides_used.csv', encoding='utf-8', index=False,na_rep='nan',header=peptides_used.columns)
-        self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
+        #self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
         self.missing_peptides_idx.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missing_peptides_idx.columns)
         self.UniProt.to_csv(self.output_name+'\\UniProt.csv', encoding='utf-8', index=False,header=UniProt.columns)
         self.longtable.to_csv(self.output_name+'\\longtable.csv', encoding='utf-8', index=False,header=longtable.columns)
@@ -74,6 +74,9 @@ class BayesENproteomics:
         protein_summary_quant, PTM_summary_quant, protein_subject_quant, PTM_subject_quant, models = bayeslm(longtable,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin)
         protein_list = list(protein_summary_quant.iloc[:,0].values.flatten())
         protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
+        
+        self.input_table['Variables used in subject quantification'] = pd.Series(subQuantadd)
+        self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
         
         # Append protein information used in pathway analysis
         for protein in protein_list:
@@ -113,9 +116,12 @@ class BayesENproteomics:
             self.PTM_subject_quant = pd.concat((PTM_subject_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
             self.PTM_subject_quant.to_csv(self.output_name+'\\PTM_subject_quant.csv', encoding='utf-8', index=False,header=self.PTM_subject_quant.columns)
 
-                        
+        if np.isnan(self.input_table['Variables used in subject quantification']):
+            subQuant = pd.DataFrame()
+        else:
+            subQuant = self.protein_subject_quant
         # Pathway quantification: fit pathway models
-        pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant, self.UniProt, organism, longtable, nRuns, False, self.protein_subject_quant, self.update_databases)
+        pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant, self.UniProt, organism, longtable, nRuns, False, subQuant, self.update_databases)
         if pathway_summary_quant.shape[0] > 0:
             pathway_summary_quant = EBvar(pathway_summary_quant)[0] # Empirical Bayes variance correction
             self.pathway_summary_quant = pathway_summary_quant
@@ -253,7 +259,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
         species = response.read().decode('utf-8')
-        species = re.search(r'<title>(\w+ \w+) (',species)
+        species = re.search(r'<title>(\w+ \w+) \(',species)[1]
             
     uniprot2reactomedf = pd.read_table("UniProt2Reactome.txt",header=None)
     uniprot2reactomedf = uniprot2reactomedf.loc[uniprot2reactomedf.iloc[:,-1].isin([species]),:].reset_index(drop=True)
@@ -1295,6 +1301,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors):
     impY = np.full((nMissing,iNumIter-iBurn),np.nan)
     #D = np.tile(meanY,nMR)
     if nMissing:
+        print(wY)
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
         if nMR:
             Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]   # MNR must be np.array
