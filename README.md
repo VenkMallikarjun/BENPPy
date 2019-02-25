@@ -128,4 +128,4 @@ This will add the `Contrasted` dataframe property to `new_instance` that can be 
 
 ### 6. Load previous analysis
 
-A previous BayesENproteomics instance (we'll stick with our example, `new_instance`) can be loaded using `new_instance.load()`, provided that `new_instance` is defined as in step 1.
+A previous BayesENproteomics instance (we'll stick with our example, `new_instance`) can be loaded using `new_instance.load()`, provided that `new_instance` is defined as in [step 1](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#1-create-a-new-bayesenproteomics-instance-new_instance-using).
