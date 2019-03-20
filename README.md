@@ -9,18 +9,17 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   * User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
   * Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
   * No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
-  * Option to utilise PyMC3-based NUTS sampler to fit a single customised model to an entire dataset (as opposed to the default option to fit protein-specific models), allowing the use of shared peptides (at the cost of very high RAM and CPU requirements).
   * MaxQuant compatibility.
   * Control group error propagation when calculating significance, if desired.
   * Option to use Bayes Factors instead of p-values, if desired.
+  * Option to run multiple MCMC in parallel for each protein - may improve numerical stability and reproducibility.
   
 ## Required libraries
-BENPPy is tested on Python 3.6 and requires [PyMC3](https://docs.pymc.io/). Both BENPPy and PyMC3 also have the following dependencies:
+BENPPy is tested on Python 3.6 and has the following dependencies:
    - NumPy
    - SciPy
    - Pandas
    - Matplotlib
-   - [Theano](http://deeplearning.net/software/theano/)
 
 ## Installation
 
@@ -32,8 +31,6 @@ BENPPy can be imported by:
 
 `import BENPPy as bp`
 
-Depending on your installation, you may need to specify the environment vabiable 'MKL_THREADING_LAYER' to be 'GNU' in your IDE using `env MKL_THREADING_LAYER=GNU`.
-
 ## Usage
 
 ### 1. Create a new BayesENproteomics instance (`new_instance`) using: 
@@ -42,6 +39,7 @@ Depending on your installation, you may need to specify the environment vabiable
 
     new_instance = bp.BayesENproteomics(output_name,    # String specifying a folder name within your working directory where output files will be stored (folder will be created if it doesn't already exist).
                                         form            # Can be either 'progenesis' (default) or 'maxquant' to specify the peptide list input format.
+                                        update_databases, # Boolean denoting whether to download new versions of UniProt and Reactome, defaults to True.
                                         )
 
 ### 2. Start the analysis with:
@@ -54,7 +52,7 @@ Depending on your installation, you may need to specify the environment vabiable
                             othermains_bysample,    # String specifying name of .csv file specifying additional main effects, with levels specified for each sample, to be included in model fitting. Defaults to ''.
                             othermains_bypeptide,   # String specifying name of .csv file specifying additional main effects, with levels specified for each peptide, to be included in model fitting. Defaults to ''.
                             otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}.
-                            regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset.
+                            regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset (depreciated).
                             normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation.
                             pepmin,                 # Scalar specifying minimum number of peptides to fit a model for a protein. Proteins with fewer than pepmin peptides will be ignored. Defaults to 3.
                             ProteinGrouping,        # If ProteinGrouping is set to True, will treat all proteins with the same gene name as a single entity using all available peptides, otherwise each one will be calculated separately.
@@ -63,6 +61,7 @@ Depending on your installation, you may need to specify the environment vabiable
                             incSubject,             # Bool denoting whether or not to include subject/run terms in model to be fit. Defaults to False.
                             subQuantadd,            # List of strings denoting which parameters to add to the 'Treatment' values to give subject-level quantification. Defaults to [''].
                             ContGroup,              # Bool denoting whether treatment variable specified in experimental_peptides headers is treated as a single continuous variable rather than multiple levels of a categorical variable. Defaults to False.
+                            nChains,                # Integer denoting how many chains to run for each protein. Chains are run in parallel. Defaults to 1.
                             )
 
 
@@ -74,12 +73,6 @@ By default BENPPy fits the following regularised model for each protein:
     `log_2(MS1 Intensity) = T + P + T*P + e`
 
 Where `T` and `P` are treatment and peptide effects recpectively and `T*P` represents the interaction between them, with `e` representing the error term.
-
-If `'dataset'` is specified for the `regression_method` arguement, the following model is fit for the entire dataset:
-
-    `log_2(MS1 Intensity) = R + T + P T*R + T*P + e`
-    
-Where `R` is the protein effect and `T*R` is the interaction between treatment and protein.
 
 These basic models can be extended by the user as desired by the `othermains_bysample` and `othermains_bypeptide` parameters. These are specified as strings containing the names of .csv files which contain columns of categorical identifiers with headers in the first row. Examples of how to specify othermains_bysample and othermains_bypeptide can be found in the examples folder (testsamplemains.csv and testpeptidemains.csv, respectively). Additional interaction effects can be specified by a dictionary in the `otherinteractors` parameter.
 
@@ -109,6 +102,7 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, protein and ptm 
 ### 4. Quality-control plots:
 
 * `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
+* If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type)` will create volcano plots (log2(fold changes) vs. log10(BHFDR)).
 
 
 ### 5. Contrasts and significance testing
