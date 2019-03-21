@@ -13,6 +13,7 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   * Control group error propagation when calculating significance, if desired.
   * Option to use Bayes Factors instead of p-values, if desired.
   * Option to run multiple MCMC in parallel for each protein - may improve numerical stability and reproducibility.
+  * Specify fixed and random effects.
   
 ## Required libraries
 BENPPy is tested on Python 3.6 and has the following dependencies:
@@ -61,6 +62,7 @@ BENPPy can be imported by:
                             incSubject,             # Bool denoting whether or not to include subject/run terms in model to be fit. Defaults to False.
                             subQuantadd,            # List of strings denoting which parameters to add to the 'Treatment' values to give subject-level quantification. Defaults to [''].
                             ContGroup,              # Bool denoting whether treatment variable specified in experimental_peptides headers is treated as a single continuous variable rather than multiple levels of a categorical variable. Defaults to False.
+                            random_effects,         # List of strings denoting which effects will be sampled from a Gaussian with a mean of 0. E.g. ['Peptide','Donor']. Defaults to [''].
                             nChains,                # Integer denoting how many chains to run for each protein. Chains are run in parallel. Defaults to 1.
                             )
 
