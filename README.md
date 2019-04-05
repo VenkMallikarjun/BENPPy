@@ -104,7 +104,7 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, protein and ptm 
 ### 4. Quality-control plots:
 
 * `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
-* If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type)` will create volcano plots (log2(fold changes) vs. log10(BHFDR)).
+* If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type)` will create volcano plots (log2(fold changes) vs. -log10(BHFDR)).
 
 
 ### 5. Contrasts and significance testing
