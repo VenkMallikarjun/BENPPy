@@ -156,10 +156,11 @@ class BayesENproteomics:
             self.PTM_subject_quant = pd.concat((PTM_subject_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
             self.PTM_subject_quant.to_csv(self.output_name+'\\PTM_subject_quant.csv', encoding='utf-8', index=False,header=self.PTM_subject_quant.columns)
 
-        if np.isnan(self.input_table['Variables used in subject quantification']):
+        if subQuantadd == [''] and incSubject == False:
             subQuant = pd.DataFrame()
         else:
             subQuant = self.protein_subject_quant
+        
         # Pathway quantification: fit pathway models
         pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant, 
                                                                            self.UniProt, 
@@ -770,8 +771,8 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     
     # Summing user-specified effects for subject-level protein quantification
     SubjectLevelColumnNames = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = True)
-    SubjectLevelProteinQuant = pd.DataFrame(columns = SubjectLevelColumnNames)
-    SubjectLevelPTMQuant = pd.DataFrame(columns = SubjectLevelColumnNames)
+    SubjectLevelProteinQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
+    SubjectLevelPTMQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
     
     #Fit protein models
     print('Fitting protein models...')
@@ -881,38 +882,47 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                         
                     PTMQuant = PTMQuant.append(PTMrow,ignore_index=True,sort=False)
                     
-                    if subQuantadd != ['']:
+                    if subQuantadd != [''] or incSubject:
                         # Subject-level PTM quantification by summing Treatment:Peptide interactions with user-specified:Peptide interaction terms
                         #subjectPTMQuant = np.concatenate((np.zeros((1,1)),results[TreatmentPeptide_i][np.newaxis]),axis=1).T
-                        subjectPTMQuant = results[TreatmentPeptide_i][np.newaxis].T
+                        subjectTreatmentPTMQuant_i = effectFinder(parameterIDs,re.escape('Peptide_'+peptide)+r'(?![|])',True,re.escape('Treatment'))+effectFinder(parameterIDs,re.escape('Treatment'),True,re.escape('Peptide_'+peptide)+r'(?![|])')
+                        subjectPTMQuant = results[subjectTreatmentPTMQuant_i][np.newaxis].T
                         subjectPTMterms = np.zeros((1,nRuns))
                         if incSubject:
-                                subjectPTMterms = effectFinder(parameterIDs,'Subject')
+                            subjectPTMterms_i = effectFinder(parameterIDs,'Subject')
+                            subjectPTMterms = results[subjectPTMterms_i]
+                        subjectPTMterms = np.reshape(subjectPTMterms,(subjectPTMQuant.size,-1),order='F')
                         for parameter in subQuantadd:
-                            subjectPTMQuant_i = effectFinder(parameterIDs,re.escape('Peptide_'+peptide),True,re.escape(parameter))+effectFinder(parameterIDs,re.escape(parameter),True,re.escape('Peptide_'+peptide))
+                            subjectPTMQuant_i = effectFinder(parameterIDs,re.escape('Peptide_'+peptide)+r'(?![|])',True,re.escape(parameter))+effectFinder(parameterIDs,re.escape(parameter),True,re.escape('Peptide_'+peptide)+r'(?![|])')
                             subjectPTMQuant_betas = np.tile(results[subjectPTMQuant_i][np.newaxis],(subjectPTMQuant.size,1))
                             subjectPTMQuant = subjectPTMQuant + subjectPTMQuant_betas
-                            
-                        subjectPTMQuant = np.reshape(subjectPTMQuant,(-1,1),order='F')
+                        
                         subjectPTMQuant = subjectPTMQuant + subjectPTMterms
-                        SubjectLevelPTMQuant = SubjectLevelPTMQuant.append(dict(zip(SubjectLevelColumnNames,subjectPTMQuant)),ignore_index=True,sort=False)
-
+                        subjectPTMQuant = np.reshape(subjectPTMQuant,(-1,nRuns),order='F')
+                        #subjectPTMQuant = np.ravel(subjectPTMQuant)
+                        
+                        for ptm_num in range(subjectPTMQuant.shape[0]):#SubjectLevelPTMQuant = SubjectLevelPTMQuant.append(dict(zip(SubjectLevelColumnNames,subjectPTMQuant)),ignore_index=True,sort=False)
+                            SubjectLevelPTMQuant.loc[SubjectLevelPTMQuant.index.max()+1,:] = subjectPTMQuant[ptm_num,:]
+                        
             ntotalPTMs = ntotalPTMs + len(PTMpositions_in_peptide)
         
-        if subQuantadd != ['']:
+        if subQuantadd != [''] or incSubject:
             #Sort out Subject-level protein quantification
             subjectLevelQuant = results[Treatment_i][np.newaxis].T
             subjectterms = np.zeros((1,nRuns))
             if incSubject:
-                subjectterms = effectFinder(parameterIDs,'Subject')
+                subjectterms_i = effectFinder(parameterIDs,'Subject')
+                subjectterms = results[subjectterms_i]
+            subjectterms = np.reshape(subjectterms,(subjectLevelQuant.size,-1),order='F')
             for parameter in subQuantadd:
                 subjectQuant_i = effectFinder(parameterIDs,parameter)
                 subjectQuant_betas = np.tile(results[subjectQuant_i][np.newaxis],(subjectLevelQuant.size,1))
                 subjectLevelQuant = subjectLevelQuant + subjectQuant_betas
-            subjectLevelQuant = np.reshape(subjectLevelQuant,(-1,1),order='F')
             subjectLevelQuant = subjectLevelQuant + subjectterms
-            SubjectLevelProteinQuant = SubjectLevelProteinQuant.append(dict(zip(SubjectLevelColumnNames,subjectLevelQuant)),ignore_index=True,sort=False)
-
+            subjectLevelQuant = np.reshape(subjectLevelQuant,(-1,nRuns),order='F')
+            #SubjectLevelProteinQuant = SubjectLevelProteinQuant.append(dict(zip(SubjectLevelColumnNames,subjectLevelQuant)),ignore_index=True,sort=False)
+            SubjectLevelProteinQuant.loc[SubjectLevelProteinQuant.index.max()+1,:] = subjectLevelQuant
+            
         #Store model with all parameters
         models[protein] = proteinmdl
         timetaken = time.time()-start
@@ -923,8 +933,10 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         q += 1
     
     #Clean up PTM quantification to account for different peptides (missed cleavages) that possess the same PTM at same site
+    SubjectLevelPTMQuant = SubjectLevelPTMQuant.loc[0:,:]
+    SubjectLevelProteinQuant = SubjectLevelProteinQuant.loc[0:,:]
     PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
-    
+
     return ProteinQuant, PTMQuant_cleaned, SubjectLevelProteinQuant.astype(float), SubjectLevelPTMQuant_cleaned.astype(float), models
 '''
 # Use PyMC3 to fit a single model for the entire dataset - very computationally intensive
