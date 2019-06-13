@@ -69,10 +69,15 @@ BENPPy can be imported by:
 
 * If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant modificationSpecificPeptides.txt first and any [PTM]Sites.txt (E.g. `['modificationSpecificPeptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'modificationSpecificPeptides.txt'`.
 
+
+*** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in an IDE (e.g. Spyder). The current work-around for this is to run it using Command Prompt if `nChains` > 1 is required. 
+
+
+
 #### 2.1 Customised models
 By default BENPPy fits the following regularised model for each protein:
 
-    `log_2(MS1 Intensity) = T + P + T*P + e`
+    log_2(MS1 Intensity) = T + P + T*P + e
 
 Where `T` and `P` are treatment and peptide effects recpectively and `T*P` represents the interaction between them, with `e` representing the error term.
 
