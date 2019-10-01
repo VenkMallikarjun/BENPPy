@@ -1,6 +1,8 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
+version 2.1.0
+
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
 The initial proof-of-concept is described in our [preprint](https://www.biorxiv.org/content/early/2018/05/10/295527) and in the [Matlab version](https://github.com/VenkMallikarjun/BayesENproteomics).
@@ -55,7 +57,7 @@ BENPPy can be imported by:
                             othermains_bypeptide,   # String specifying name of .csv file specifying additional main effects, with levels specified for each peptide, to be included in model fitting. Defaults to ''.
                             otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}.
                             regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset (depreciated).
-                            normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation.
+                            normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation (also assumes values are already logged).
                             pepmin,                 # Scalar specifying minimum number of peptides to fit a model for a protein. Proteins with fewer than pepmin peptides will be ignored. Defaults to 3.
                             ProteinGrouping,        # If ProteinGrouping is set to True, will treat all proteins with the same gene name as a single entity using all available peptides, otherwise each one will be calculated separately.
                             peptide_BHFDR,          # Scalar FDR cutoff employed to filter peptides before analysis. Defaults to 0.2.
@@ -68,7 +70,7 @@ BENPPy can be imported by:
                             )
 
 
-* If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant modificationSpecificPeptides.txt first and any [PTM]Sites.txt (E.g. `['modificationSpecificPeptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'modificationSpecificPeptides.txt'`.
+* If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant Peptides.txt first and any [PTM]Sites.txt (E.g. `['Peptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'SpecificPeptides.txt'`.
 
 
 *** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in Spyder. The current work-around for this is to run it in an external terminal if `nChains` > 1 is required. 
