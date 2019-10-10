@@ -1,7 +1,7 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.1.0
+version 2.1.2
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
@@ -12,7 +12,7 @@ The initial proof-of-concept is described in our [preprint](https://www.biorxiv.
   * Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
   * No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
   * MaxQuant compatibility.
-  * Control group error propagation when calculating significance, if desired.
+  * Control group error propagation when calculating significance (Welch's t-test), if desired.
   * Option to use Bayes Factors instead of p-values, if desired.
   * Option to run multiple MCMC in parallel for each protein - may improve numerical stability and reproducibility.
   * Specify fixed and random effects.
@@ -101,18 +101,28 @@ After `doAnalysis` finishes there will be several new properties added to the in
 * `new_instance.longtable` long-form vector table used in creation of design matrices.
 
 #### Summary fold changes
-* `new_instance.protein_summary_quant` protein-level log2 fold changes.
-* `new_instance.ptm_summary_quant` ptm-level log2 fold changes.
-* `new_instance.pathway_summary_quant` pathway-level log2 fold changes.
+* `new_instance.protein_summary_quant` protein-level log2 abundances.
+* `new_instance.ptm_summary_quant` ptm-level log2 abundances.
+* `new_instance.pathway_summary_quant` pathway-level log2 abundances.
 
 #### Subject-level quantifications
 
-If `subQuantadd` arguement is used when `doAnalysis` is called, protein and ptm subject/run-level quantification will be provided in `new_instance.protein_subject_quant` and `new_instance.ptm_subject_quant`, respectively.
+If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubject = True` protein and ptm subject/run-level quantification will be provided in `new_instance.protein_subject_quant` and `new_instance.ptm_subject_quant`, respectively.
 
 ### 4. Quality-control plots:
 
 * `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
-* If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type)` will create volcano plots (log2(fold changes) vs. -log10(BHFDR)).
+* If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type = 'protein',residue = 'any')` will create protein-level volcano plots (log2(fold changes) vs. -log10(BHFDR)). `plot_type` can also be `'ptm'` to show all PTMs or a string denoting a specfic PTM type (as written in input peptide lists), or `'pathway'`. If `plot_type = 'ptm'`, `residue` can equal any string of single-letter amino acids to plot only PTMs on those residues (E.g. `residue = 'NQR'`).
+* Protein fold change VS PTM fold change plot can be made with:
+
+
+::
+
+    newinstance.proteinVSptm(ptm_type,          # String deonting PTM type to graph (as written in peptide list input files).
+                             residue = 'any',   # String containing single-letter amino acid denoting which residues to plot.
+                             exp = 1,           # Index for numerator in fold change calculation. Defaults to 1 (i.e. second column).
+                             ctrl = 0           # Index for denominator in fold change calculation. Defaults to 0 (i.e. first column).
+                             )
 
 
 ### 5. Contrasts and significance testing
@@ -123,7 +133,7 @@ Significance testing comparing all treatments to a single control group can be p
 
     new_instance.doContrasts(Contrasted,      # String denoting which contrasts to test. Can be either 'protein', 'ptm'or 'pathway'. Defaults to 'protein'.
                              ctrl,            # Int denoting which column to use as the control group. Defaults to 0, meaning the first column.
-                             propagateErrors, # Bool deonting whether to propagate control group errors into experimental group errors (using square root of sum of squares) for t-statistic calculation. Defualts to False.
+                             propagateErrors, # Bool deonting whether to propagate control group errors into experimental group errors (using square root of sum of squares) for t-statistic calculation (Welch's t-test). Defualts to False.
                              UseBayesFactors  # Bool denoting whether to use Bayes Factors rather than p-values. Still needs testing. Defaults to False.
                              )
                              
