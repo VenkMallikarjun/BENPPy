@@ -481,7 +481,7 @@ class BayesENproteomics:
             #labels=labelList,
             distance_sort='descending',
             show_leaf_counts=True)
-        mpl.xlabel(peptides['Peptide'])
+        #mpl.xlabel(peptides['Peptide'])
         mpl.ylabel('Distance')
         mpl.show()
 
@@ -536,7 +536,7 @@ class BayesENproteomics:
 
 
 # Wrapper for pathway model fitting
-def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=1):
+def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=3):
 
     if download:
         print('Getting Reactome Pathway data...')
@@ -602,6 +602,8 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         ProteinsInPathway2 = ProteinsInPathway2[:,(totalPinP >= 5).flatten()][:,np.newaxis]
     FCcolumns = models.loc[:,['fold change}' in i for i in models.columns]]
     nGroups = FCcolumns.shape[1]
+    
+    '''
     if not subjectQuant.empty:
         a = int(nRuns/nGroups)
         FCcolumns = np.array(subjectQuant.iloc[:,0:nRuns]).astype(float)
@@ -611,10 +613,14 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         a = 1
         SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
         doWeights = True
-
+    '''
+    a = 1
+    SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
+    doWeights = True
+    
     t1 = list(np.unique(model_table['Treatment']))
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
-    PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE']+column_names)
+    PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names)
     pathway_models = {}
     for i in range(x1):
         start = time.time()
@@ -652,7 +658,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
-        PathwayQuant = PathwayQuant.append(dict(zip(['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE']+column_names,[uniprot2reactomedf2.iloc[i,1],uniprot2reactomedf2.iloc[i,3],nprot2,dof,pathwaymdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
+        PathwayQuant = PathwayQuant.append(dict(zip(['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names,[uniprot2reactomedf2.iloc[i,1],uniprot2reactomedf2.iloc[i,3],nprot2,dof,pathwaymdl['residVar'],list(np.unique(proteins))]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
 
         pathway_models[uniprot2reactomedf2.iloc[i,3]] = pathwaymdl
 
@@ -1044,7 +1050,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'STXB1_HUMAN':
+        if protein == 'PININ_HUMAN':
             v=1
 
         if v==0:
@@ -1664,6 +1670,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     #print(time.time())
     [n,p] = X.shape
     meanY = np.nanmean(Y).flatten()
+    stdY = np.nanstd(Y).flatten()
     sigma2_shape = (n-1+p)/2;
     beta_posterior = np.zeros((nIter-nBurn,p))
     DoF = np.zeros((nIter-nBurn,1))
@@ -1699,7 +1706,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     XtX = wX.T @ wX
 
     # Imputation variables
-    impmin = np.nanmin(wY)-2
+    MNRimpmin = (np.nanmin(wY)-2-meanY)/(stdY+1e-5)
     Ymissing = np.isnan(wY)
     Ymissing_i = np.where(Ymissing)[0]
     nMissing = Ymissing_i.size
@@ -1712,6 +1719,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     #D = np.tile(meanY,nMR)
     if nMissing:
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
+        MNRimpmax = (alpha-meanY)/(stdY+1e-5)
         if nMR:
             Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]   # MNR must be np.array
             #if nMR/n < 0.9:
@@ -1729,7 +1737,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
         if nMissing:
             if nMNR:
                 # Impute MNR missing values from truncated gaussian
-                z = stats.truncnorm.rvs(impmin,alpha,loc=meanY,scale=sigma2,size=(nMNR,1))
+                z = stats.truncnorm.rvs(MNRimpmin,MNRimpmax,loc=meanY,scale=stdY,size=(nMNR,1))
                 #wY[Ymissing_i[np.where(MNR)[0]]] = z*w[Ymissing_i[np.where(MNR)[0]]]
                 wY[Ymissing_i[np.where(MNR)[0]]] = z*s[Ymissing_i[np.where(MNR)[0]]]+w[Ymissing_i[np.where(MNR)[0]]]
             if nMR:
