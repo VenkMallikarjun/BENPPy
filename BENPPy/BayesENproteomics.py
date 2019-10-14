@@ -73,9 +73,9 @@ class BayesENproteomics:
                                                                        nDB,
                                                                        regression_method,
                                                                        ContGroup,
-                                                                       form = self.form,
-                                                                       download = self.update_databases,
-                                                                       impute='ami')
+                                                                       self.form,
+                                                                       self.update_databases,
+                                                                       impute)
         self.peptides_used = peptides_used
         #self.missing_peptides_idx = missing_peptides_idx
         self.UniProt = UniProt
@@ -602,7 +602,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         ProteinsInPathway2 = ProteinsInPathway2[:,(totalPinP >= 5).flatten()][:,np.newaxis]
     FCcolumns = models.loc[:,['fold change}' in i for i in models.columns]]
     nGroups = FCcolumns.shape[1]
-    
+
     '''
     if not subjectQuant.empty:
         a = int(nRuns/nGroups)
@@ -617,7 +617,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     a = 1
     SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
     doWeights = True
-    
+
     t1 = list(np.unique(model_table['Treatment']))
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names)
@@ -648,12 +648,13 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         parameterIDs = X.columns
         X = np.array(X,dtype=int)
         Y = np.array(abundances)[:,np.newaxis]
+        n = X.shape[0]
 
         # Fit model
         pathwaymdl = weighted_bayeslm_multi(X,Y,parameterIDs,doWeights,SEs,np.array([]),0,[],nChains)
         results = pathwaymdl['beta_estimate']
         SEMs = pathwaymdl['SEMs']
-        dof = pathwaymdl['dof']
+        dof = n-1#pathwaymdl['dof']
 
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
@@ -2187,6 +2188,9 @@ def Impute(X,method,RA):
             nMissing = np.sum(iMissing)
             r = np.random.randn(1,nMissing)
             intensities[i,iMissing] = (0.3 * sigmas[i]) * r + mus[i]
+
+    X.iloc[:,RA:] = intensities
+    return X
 
 class Error(Exception):
     """Base class for exceptions in this module."""
