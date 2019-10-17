@@ -113,7 +113,7 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubjec
 
 ### 4. Quality-control plots:
 
-* `new_instance.boxplots()` will create boxplots of protein-, PTM- and pathway-level fold changes. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
+* `new_instance.boxplots()` will create boxplots of logged protein-, PTM-, peptidoform and pathway-level abundances. Extremely large values indicate potential overfitting. Tightening (decreasing) the peptide FDR threshold (`peptide_BHFDR` arguement in `doAnalysis`) or decreasing model complexity may improve overfitting.
 * If contrasts have been made (see [step 5](https://github.com/VenkMallikarjun/BENPPy/blob/master/README.md#5-contrasts-and-significance-testing)), `new_instance.volcanoes(plot_type = 'protein',residue = 'any')` will create protein-level volcano plots (log2(fold changes) vs. -log10(BHFDR)). `plot_type` can also be `'ptm'` to show all PTMs or a string denoting a specfic PTM type (as written in input peptide lists), or `'pathway'`. If `plot_type = 'ptm'`, `residue` can equal any string of single-letter amino acids to plot only PTMs on those residues (E.g. `residue = 'NQR'`).
 * Protein fold change VS PTM fold change plot can be made with:
 
