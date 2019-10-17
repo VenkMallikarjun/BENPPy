@@ -70,7 +70,8 @@ BENPPy can be imported by:
                             )
 
 
-* If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant Peptides.txt first and any [PTM]Sites.txt (E.g. `['Peptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'Peptides.txt'`.
+* If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. Do not include spectral counts. 
+* If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant Peptides.txt first and any [PTM]Sites.txt (E.g. `['Peptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'Peptides.txt'`.
 
 
 *** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in Spyder. The current work-around for this is to run it in an external terminal if `nChains` > 1 is required. 
