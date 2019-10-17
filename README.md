@@ -97,7 +97,8 @@ After `doAnalysis` finishes there will be several new properties added to the in
 #### Preliminary analysis properties - input data
 * `new_instance.input_table` provides information about parameters used in analysis.
 * `new_instance.peptides_used` lists peptides that were used in subsequent analysis.
-* `new_instance.missing_peptides_idx` Boolean array denoting where missing values are.
+* `new_instance.allValues` gives all values (observed and average imputed) for each peptide.
+* `new_instance.missing_peptides_idx` Boolean array denoting where missing values are in `new_instance.allValues`.
 * `new_instance.UniProt` UniProt database used at time of analysis.
 * `new_instance.longtable` long-form vector table used in creation of design matrices.
 
