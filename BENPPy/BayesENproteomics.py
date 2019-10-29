@@ -23,6 +23,7 @@ import os
 import multiprocessing
 import time
 
+__version__ = '2.1.5'
 # Output object that hold all results variables
 class BayesENproteomics:
 
@@ -104,7 +105,7 @@ class BayesENproteomics:
                                         index = [0])
 
         self.input_table = input_table
-
+        self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
         self.peptides_used.to_csv(self.output_name+'\\peptides_used.csv', encoding='utf-8', index=False,na_rep='nan',header=peptides_used.columns)
         #self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
         #self.missing_peptides_idx.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missing_peptides_idx.columns)
@@ -213,14 +214,24 @@ class BayesENproteomics:
     def load(self):
         UniProt = pd.read_table(self.output_name+'\\UniProt.csv',sep = ',')
         peptides_used = pd.read_table(self.output_name+'\\peptides_used.csv',sep = ',')
-        missing_peptides_idx = pd.read_table(self.output_name+'\\missing_peptides_idx.csv',sep = ',')
         input_table = pd.read_table(self.output_name+'\\input_table.csv',sep = ',')
         longtable = pd.read_table(self.output_name+'\\longtable.csv',sep = ',')
         self.UniProt = UniProt
         self.peptides_used = peptides_used
-        self.missing_peptides_idx = missing_peptides_idx
         self.input_table = input_table
         self.longtable = longtable
+        try:
+            missing_peptides_idx = pd.read_table(self.output_name+'\\missing_peptides_idx.csv',sep = ',')
+            self.missing_peptides_idx = missing_peptides_idx
+        except:
+            print('missing_peptides_idx output missing')
+
+        try:
+            allValues = pd.read_table(self.output_name+'\\allValues.csv',sep = ',')
+            self.allValues = allValues
+        except:
+            print('allValues output missing')
+
         try:
             protein_summary_quant = pd.read_table(self.output_name+'\\protein_summary_quant.csv',sep = ',')
             self.protein_summary_quant = protein_summary_quant
@@ -276,7 +287,7 @@ class BayesENproteomics:
             msg = 'Contrasted must be ''pathway'', ''protein'' or ''ptm''.'
             raise InputError(Contrasted,msg)
 
-        DoFs = np.array(self.Contrasted['degrees of freedom'])[:,np.newaxis]
+        DoFs = np.array(self.Contrasted['degrees of freedom'])[:,np.newaxis].astype(float)
         FCcolumns = np.array(self.Contrasted.iloc[:,['fold change}' in i for i in self.Contrasted.columns]])
         FCs = FCcolumns - FCcolumns[:,ctrl][:,np.newaxis]
         nProteins, nGroups = FCcolumns.shape
@@ -538,7 +549,13 @@ class BayesENproteomics:
 # Wrapper for pathway model fitting
 def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=3):
 
-    if download:
+    try:
+        if not download:
+            uniprot2reactomedf = pd.read_table("UniProt2Reactome.txt",header=None)
+        else:
+            msg = 'UniProt2Reactome.txt not found. Attempting to download from Reactome.org'
+            raise InputError(download,msg)
+    except:
         print('Getting Reactome Pathway data...')
         url = 'http://reactome.org/download/current/UniProt2Reactome.txt'
         request = urllib.request.Request(url)
@@ -748,8 +765,13 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         GroupIDs = set(['Continuous variable'])
         nGroups = 2
     else:
+        if form == 'maxquant':
+            for i in range(len(GroupNames)):
+                GroupNames[i] = re.sub(r'(\.[0-9+])','',GroupNames[i])
+
         GroupIDs = set(GroupNames)
         nGroups = len(GroupIDs)
+        print(GroupIDs)
 
     if othermains_bysample != '':
         e_mainsampleeffects = pd.read_csv(othermains_bysample) #.csv assigning additional column varibles to each run
@@ -855,6 +877,8 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     #Do imputation
     if impute != 'ami':
         e_peplist = Impute(e_peplist, impute, RA)
+        normed_peps = e_peplist.iloc[:,RA:]
+        #e_peplist.to_csv('X.csv', encoding='utf-8', index=False,header=e_peplist.columns)
 
     unique_pep_ids = np.unique(e_peplist.iloc[:,8])
     nUniquePeps = len(unique_pep_ids)
@@ -1027,6 +1051,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     t1 = list(np.unique(model_table.loc[:,'Treatment']))
     t2 = ['Treatment_']*len(t1)
     t = [m+str(n) for m,n in zip(t2,t1)]
+    s = list(np.unique(model_table.loc[:,'Subject']))
     nProteins = len(unique_proteins)
     nInteractors = len(otherinteractors)
 
@@ -1039,7 +1064,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #PTMQuant = pd.concat([PTMQuant,pd.DataFrame(np.zeros((ntotalPTMs,nGroups*4)),columns = column_names)],axis=1,ignore_index=True,sort=False)
 
     # Summing user-specified effects for subject-level protein quantification
-    SubjectLevelColumnNames = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = True)
+    SubjectLevelColumnNames = quantTableNameConstructor(s,nRuns,isSubjectLevelQuant = True)
     SubjectLevelProteinQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
     SubjectLevelPTMQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
     allValues = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
@@ -1051,12 +1076,12 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'PININ_HUMAN':
+        if protein == 'P69503:APT_ECOLI':
             v=1
 
         if v==0:
             continue
-        '''
+            '''
         start = time.time()
         protein_table = model_table.loc[model_table.loc[:,'Protein'] == protein,:].reset_index(drop=True)
         nPeptides = len(np.unique(protein_table['PeptideSequence']))#1+np.sum(Peptide_i.astype(int))
@@ -1091,6 +1116,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         n = X_missing.shape[0]
         X_missing = np.array(X_missing,dtype=int)#sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
         X = np.array(X,dtype=int)#sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
+        print(sum(missing)/n*100, '% missing values')
 
         # Fit missing model to choose which missing values are MNR and which are MAR
         missingmdl = weighted_bayeslm_multi(X_missing,Y_missing,parameterIDs_missing,False,np.ones([n,1]),np.array([]),nInteractors,[],nChains,200,0)
@@ -1621,6 +1647,7 @@ def MaxQuant2BENP(peplists):
     for i in range(len(GroupNames)):
         GroupNames[i] = re.sub(r'_([0-9+])','',GroupNames[i])
     #GroupNames = np.unique(GroupNames)
+    print(GroupNames)
     n = pepdf.shape[0]
     nRuns = len(runs)
     RAind = 12
@@ -2188,8 +2215,10 @@ def Impute(X,method,RA):
             nMissing = np.sum(iMissing)
             r = np.random.randn(1,nMissing)
             intensities[i,iMissing] = (0.3 * sigmas[i]) * r + mus[i]
+            #print(intensities[i,iMissing])
 
     X.iloc[:,RA:] = intensities
+
     return X
 
 class Error(Exception):
