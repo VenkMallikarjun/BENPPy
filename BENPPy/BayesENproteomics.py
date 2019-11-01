@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.1.5'
+__version__ = '2.1.7'
 # Output object that hold all results variables
 class BayesENproteomics:
 
@@ -865,7 +865,10 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     # Do normalisation to median intensities of specified peptides
     if normmethod == 'median':
         e_peplist.iloc[:,RA:] = np.log2(e_peplist.iloc[:,RA:].astype(float))
-        norm_intensities = np.log2(n_peplist.iloc[2:,RA:].astype(float))
+        if form == 'progenesis':
+            norm_intensities = np.log2(n_peplist.iloc[2:,RA:].astype(float))
+        else:
+            norm_intensities = np.log2(n_peplist.iloc[:,RA:].astype(float))
         normed_peps = normalise(e_peplist.iloc[:,RA:].astype(float),norm_intensities)
         normed_peps[np.isinf(normed_peps)] = np.nan
     elif normmethod == 'none':
@@ -1076,12 +1079,12 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'P69503:APT_ECOLI':
+        if protein == 'LEG1_RAT':
             v=1
-
+            continue
         if v==0:
             continue
-            '''
+        '''
         start = time.time()
         protein_table = model_table.loc[model_table.loc[:,'Protein'] == protein,:].reset_index(drop=True)
         nPeptides = len(np.unique(protein_table['PeptideSequence']))#1+np.sum(Peptide_i.astype(int))
@@ -1548,6 +1551,7 @@ def quantTableNameConstructor(group_names,nRuns,isSubjectLevelQuant = False):
 def normalise(X,Z=[]):
     if not Z.empty:
         median_Z = np.nanmedian(Z,axis=0)
+        print(median_Z)
     else:
         median_Z = np.nanmedian(X,axis=0)
     normalised_X = X - median_Z
@@ -1726,7 +1730,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
         tau_vector = theta0['tau_vector']
         w = theta0['weights']
         Yimputed = theta0['Yimputed']
-        wY = Yimputed*w
+        wY = Y*w
         wX = X*w
 
     D_tau_squared = np.diag(tau_vector.flatten())
@@ -1742,7 +1746,6 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     nMR = nMissing - nMNR
     prop_MNR = nMNR/n
     impY = np.full((nMissing,nIter-nBurn),np.nan)
-
     random_effect_ids = [i for i in list(range(p)) if i not in fixed_effect_ids]
     #D = np.tile(meanY,nMR)
     if nMissing:
@@ -1856,6 +1859,7 @@ def weighted_bayeslm_multi(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fix
         mdl = weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,1500,750,1304,[])
         return mdl
 
+    Y_missing = np.isnan(Y)
     seeds = list(range(nChains))
     # Initial run
     pool = multiprocessing.Pool(nChains)
