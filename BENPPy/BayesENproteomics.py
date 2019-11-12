@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.1.7'
+__version__ = '2.1.9'
 # Output object that hold all results variables
 class BayesENproteomics:
 
@@ -54,7 +54,8 @@ class BayesENproteomics:
                    form='progenesis',
                    random_effects='all',
                    nChains=3,
-                   impute='ami'):
+                   impute='ami',
+                   reassign_unreviewed=True):
 
         bayeslm = fitProteinModels
         if regression_method == 'dataset':
@@ -76,7 +77,8 @@ class BayesENproteomics:
                                                                        ContGroup,
                                                                        self.form,
                                                                        self.update_databases,
-                                                                       impute)
+                                                                       impute,
+                                                                       reassign_unreviewed)
         self.peptides_used = peptides_used
         #self.missing_peptides_idx = missing_peptides_idx
         self.UniProt = UniProt
@@ -718,7 +720,21 @@ def EBvar(models):
     return models,{'d0':d0, 's0':s0}
 
 # Data-wrangler function
-def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',othermains_bypeptide = '', normmethod='median', ProteinGrouping=False, scorethreshold=0.2, nDB=1, regression_method = 'protein', ContGroup=[], form='progenesis',download=True,impute='ami'):
+def formatData(normpeplist,
+                exppeplist,
+                organism,
+                othermains_bysample = '',
+                othermains_bypeptide = '',
+                normmethod='median',
+                ProteinGrouping=False,
+                scorethreshold=0.2,
+                nDB=1,
+                regression_method = 'protein',
+                ContGroup=[],
+                form='progenesis',
+                download=True,
+                impute='ami',
+                reassign_unreviewed=True):
 
     #get uniprot info
     print('Getting Uniprot data for',organism)
@@ -747,8 +763,10 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
             accessions.iloc[n] = accession
             print(n, accession)
         e_peplist['Accession'] = accessions
+    elif form == 'peaks':
+        e_peplist,GroupNames,runIDs,RA,nEntries,nRuns = PEAKS2BENP(exppeplist)
     else:
-        msg = 'form must be ''progenesis'' (default) or ''maxquant''.'
+        msg = 'form must be ''progenesis'' (default), ''peaks'' or ''maxquant''.'
         raise InputError(form,msg)
 
     if normpeplist != exppeplist:
@@ -757,6 +775,8 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
             n_peplist = Progenesis2BENP(normpeplist)[0]
         elif form == 'maxquant':
             n_peplist = MaxQuant2BENP([normpeplist])[0]
+        elif form == 'peaks':
+            n_peplist = PEAKS2BENP(normpeplist)[0]
     else:
         n_peplist = dc(e_peplist)
 
@@ -789,7 +809,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
         scores[scores == '---'] = np.nan #Progenesis-specific
         #print(np.array(scores, dtype=float))
         scorebf = (np.log10(1/(20*(e_length - 2))) * -10) - 13 #Specific to Mascot scores
-    elif form == 'maxquant':
+    else:
         e_length = e_peplist.shape[0]
         scores = e_peplist['Score']
         scorebf = (np.log10(1/(20*e_length)) * -10) - 13
@@ -806,7 +826,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
     # Create unique (sequence and mods) id for each peptide
     if form == 'progenesis':
         e_peplist = e_peplist.iloc[2:,:].loc[pepID_fdr < scorethreshold,:]
-    elif form == 'maxquant':
+    else:
         e_peplist = e_peplist.loc[pepID_fdr < scorethreshold,:]
 
         #for i in range(e_peplist.shape[0]):
@@ -831,7 +851,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
             protein_name = protein_assc[3:]
         else:
             protein_name = protein_assc
-        if form == 'maxquant':
+        if form == 'maxquant' or form == 'peaks':
             protein_name = protein_name[0:-1]
 
         uniprot_find = uniprotall.iloc[:,1].isin([protein_name])
@@ -918,7 +938,7 @@ def formatData(normpeplist, exppeplist, organism, othermains_bysample = '',other
             continue
 
         #print(pep_values.shape,q,q-1+nP)
-        if np.any(pep_info.iloc[:,0].isin(['unreviewed'])):
+        if np.any(pep_info.iloc[:,0].isin(['unreviewed'])) and reassign_unreviewed:
             reviewed_prot_find = uniprotall_reviewed['Sequence'].str.contains(pep_info.iloc[0,8]) #Find all reviewed proteins that peptide could be part of
             reviewed_prot_findidx = np.where(reviewed_prot_find)[0]
             if reviewed_prot_findidx.any():
@@ -1079,7 +1099,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'LEG1_RAT':
+        if protein == 'F1MAM6_RAT':
             v=1
             continue
         if v==0:
@@ -1596,6 +1616,60 @@ def getUniprotdata(species, download = True):
 
     return updf, upcol
 
+# Import PEAKS 10 protein-peptide.csv output from PEAKS label-free quant
+def PEAKS2BENP(peplist):
+
+    print('Importing',peplist,'peptide list: ')
+    PEAKSdf = pd.read_csv(peplist)
+
+    #find where intensity columns belonging
+    intensity_begin = int(np.where([i == 'Avg. Area' for i in PEAKSdf.columns])[0]+1)
+    intensity_end = int(np.where([i == 'Sample Profile (Ratio)' for i in PEAKSdf.columns])[0])
+    intensity_cols = PEAKSdf[PEAKSdf.columns[intensity_begin:intensity_end]] #replace 'intensity' with some other identifier for these columns
+
+    #find column with peptide sequence, modifications, accession, charge, PEP, peptideID, etc
+    Proteins = PEAKSdf[['Protein Group','Protein ID','Used','Candidate','Start','Quality','Avg. ppm','Significance','Peptide','Avg. Area','Protein Accession','PTM']]
+    Proteins = Proteins.rename(columns={'Protein Group':'Reviewed?','Protein Accession': 'Accession', 'Used':'Charge', 'PTM':'Modifications','Quality':'ProteinSequence','Protein ID':'PeptideID','Peptide':'Sequence','Significance':'Score'})
+
+    # Make progenesis-style peptide sequence and PTM summary for each peptide
+    for i in range(Proteins.shape[0]):
+        peptide_seq = Proteins['Sequence'].iloc[i]
+        peptide_seq = peptide_seq[2:-2]
+        print(peptide_seq)
+        try:
+            split_seq = re.split('\(.+?\)',peptide_seq)
+        except:
+            split_seq = dc(peptide_seq)
+        temp_seq = ''
+        for j in split_seq:
+            temp_seq = temp_seq + j
+        print(temp_seq)
+        Proteins['Sequence'].iloc[i] = temp_seq
+
+        if split_seq != peptide_seq:
+            mod_positions = [len(i) for i in split_seq]
+            mod_positions = mod_positions[:-1]
+            print(mod_positions)
+            peptide_mods = Proteins['Modifications'].iloc[i]
+            try:
+                mod_types = peptide_mods.split(';')
+            except:
+                mod_types = ''
+            PTMsummary = ''
+            for i in range(len(mod_positions)):
+                PTMsummary = PTMsummary + ' [' + str(mod_positions[i]) + '] ' + mod_types[i]
+            Proteins['Modifications'].iloc[i] = PTMsummary
+            print(PTMsummary)
+    pepdf = pd.concat((Proteins,Intensity_cols),axis=1,sort=False)
+    GroupNames = list(Intensities.columns)
+    runs = list(Intensities.columns)
+    for i in range(len(GroupNames)):
+        GroupNames[i] = re.sub(r'_([0-9+])','',GroupNames[i])
+    #GroupNames = np.unique(GroupNames)
+    print(GroupNames)
+
+    return pepdf, GroupNames, runs, intensity_begin, PEAKSdf.shape[0], intensity_cols.shape[1]
+
 # Import peptide tables from list 'peplist' consisting of a list of MaxQuant peptide .csv tables and associated modification tables
 def MaxQuant2BENP(peplists):
     print('Importing',peplists,'peptide lists: ')
@@ -1699,7 +1773,7 @@ def Progenesis2BENP(peplist):
 # Weighted Bayesian regression function not typically called by user
 # MNR must by boolean numpy array!!
 def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids, nIter, nBurn, seed, theta0=[]):
-    #print(time.time())
+
     [n,p] = X.shape
     meanY = np.nanmean(Y).flatten()
     stdY = np.nanstd(Y).flatten()
@@ -1707,12 +1781,11 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     beta_posterior = np.zeros((nIter-nBurn,p))
     DoF = np.zeros((nIter-nBurn,1))
     sigma_squared = np.zeros((nIter-nBurn,1))
-    #intercept = np.zeros((iNumIter-iBurn,1))
+
 
     if theta0 == []:
         np.random.seed(int(seed*100000000))
-        beta_estimate = 10*np.random.randn(1,p)#np.zeros((1,p))
-        #b0 = np.zeros((1,1))#np.random.randn(1,1)
+        beta_estimate = 10*np.random.randn(1,p)
         sigma2 = np.random.gamma(sigma2_shape, 0.01)
         lambda_lasso = np.array(np.sqrt(np.random.gamma(p,1,(1,p))))
         lambda_ridge = np.array(np.random.gamma(1,1/3,(1,p)))
@@ -1738,7 +1811,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     XtX = wX.T @ wX
 
     # Imputation variables
-    MNRimpmin = (np.nanmin(wY)-2-meanY)/(stdY+1e-5)
+    MNRimpmin = (np.nanmin(wY)-2-meanY)/(stdY+1)
     Ymissing = np.isnan(wY)
     Ymissing_i = np.where(Ymissing)[0]
     nMissing = Ymissing_i.size
@@ -1747,21 +1820,13 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     prop_MNR = nMNR/n
     impY = np.full((nMissing,nIter-nBurn),np.nan)
     random_effect_ids = [i for i in list(range(p)) if i not in fixed_effect_ids]
-    #D = np.tile(meanY,nMR)
+
     if nMissing:
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
-        MNRimpmax = (alpha-meanY)/(stdY+1e-5)
+        MNRimpmax = (alpha-meanY)/(stdY+1)
         if nMR:
             Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]   # MNR must be np.array
-            #if nMR/n < 0.9:
-            #try:
             XXTYMR = linalg.inv((Xmiss @ Xmiss.T)*np.eye(nMR))
-                #np.linalg.cholesky(XXTYMR)
-            #else:
-            #except:
-            #    nMR = False # If inv fails probably means there are too many missing values -> protein is low abundance -> use MNR imputation
-            #    MNR = np.array([True for i in MNR])
-            #    nMNR = nMissing
 
     ii = 0
     for i in range(nIter+1):
@@ -1769,30 +1834,29 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
             if nMNR:
                 # Impute MNR missing values from truncated gaussian
                 z = stats.truncnorm.rvs(MNRimpmin,MNRimpmax,loc=meanY,scale=stdY,size=(nMNR,1))
-                #wY[Ymissing_i[np.where(MNR)[0]]] = z*w[Ymissing_i[np.where(MNR)[0]]]
-                wY[Ymissing_i[np.where(MNR)[0]]] = z*s[Ymissing_i[np.where(MNR)[0]]]+w[Ymissing_i[np.where(MNR)[0]]]
+                wY[Ymissing_i[np.where(MNR)[0]]] = z*w[Ymissing_i[np.where(MNR)[0]]]
             if nMR:
                 # Impute MR missing values from multivariate_normal
                 B = sigma2*XXTYMR
-                #y0 = sigma2*(np.random.randn(1,1)+np.nanmean(beta_estimate))
-                D = (Xmiss @ beta_estimate.T).flatten() #np.ndarray.flatten(np.concatenate((X0[Ymissing_i[np.where(MNR == False)[0]],:],Xmiss),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T.flatten())
+                D = (Xmiss @ beta_estimate.T).flatten()
                 wY[Ymissing_i[np.where(MNR == False)[0]]] = (w[Ymissing_i[np.where(MNR == False)[0]]].T*mvn(D,B)).T
-                #print(mvn(D,B).shape,s[Ymissing_i[np.where(MNR == False)[0]]].shape, w[Ymissing_i[np.where(MNR == False)[0]]].T.shape)
 
             Yimputed[Ymissing] = wY[Ymissing]/w[Ymissing]
 
         # beta_estimate from conditional multivariate_normal
         L = linalg.inv(np.diag((lambda_ridge+tau_vector).ravel())+XtX)
-        C = L*sigma2
+        C = L*sigma2#+(np.eye(p)*0.00001)
+
+        #if np.linalg.det(C) < 0:
+        #    C = C + np.eye(p)*0.01
         A = np.ndarray.flatten(L @ (wX.T @ wY))
         beta_estimate[:,fixed_effect_ids] = A[fixed_effect_ids]#mvn(A[fixed_effect_ids],C[fixed_effect_ids][:,fixed_effect_ids]).ravel()#[np.newaxis]
         beta_estimate[:,random_effect_ids] = mvn(A[random_effect_ids],C[random_effect_ids][:,random_effect_ids]).ravel()
 
         # sigma**2 from inverse gamma
         residuals = Yimputed - ((X[:,random_effect_ids] @ beta_estimate[:,random_effect_ids].flatten()[:,np.newaxis]) + (X[:,fixed_effect_ids] @ beta_estimate[:,fixed_effect_ids].flatten()[:,np.newaxis])) #np.concatenate((X0,X),axis=1) @ np.concatenate((b0,beta_estimate),axis=1).T
-        #residuals = Yimputed - (r0 + X @ beta_estimate.flatten()[:,np.newaxis])
         sigma2_scale = (residuals.T @ residuals)/2 + ((linalg.inv(D_tau_squared) @ (beta_estimate*lambda_lasso).T).T @ beta_estimate.T)/2 + ((beta_estimate*lambda_ridge) @ beta_estimate.T)/2
-        sigma2 = 1/np.random.gamma(sigma2_shape,1/sigma2_scale+0.01) #Change to .ravel() ??
+        sigma2 = 1/np.random.gamma(sigma2_shape,1/sigma2_scale+0.01)
 
         # 1/tau**2 from IG
         tau2_shape = np.sqrt((lambda_lasso**2*sigma2)/beta_estimate**2)
@@ -1802,18 +1866,16 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
 
         # lambda_lasso and lambda_ridge from gamma
         lambda_lasso[0,:] = np.sqrt(np.random.gamma(p+nInteractors, 1/((1/tau_vector).sum()/2)+1))
-        lambda_ridge[0,:] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+0.01)+3)
+        lambda_ridge[0,:] = np.random.gamma(1+nInteractors, 1/(beta_estimate**2/2/sigma2+(1/p))+3)
 
         if i > nBurn:
             beta_posterior[ii,:] = beta_estimate
             DoF[ii] = np.sum((X @ L @ X.T).diagonal())
-            #intercept[ii] = b0
             sigma_squared[ii] = sigma2
             impY[:,ii] = Yimputed[Ymissing]
             ii = ii + 1
 
         if do_weights:
-            #r = 1/(residuals**2/2/sigma2 + 2)
             r = 1/(0.5+residuals**2/2/sigma2)
             s = np.random.binomial(1,Scores)
             w = 1+s+np.random.gamma(0.5+s, r)
