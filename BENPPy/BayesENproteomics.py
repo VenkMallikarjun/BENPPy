@@ -23,7 +23,8 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.1.9'
+__version__ = '2.3.1'
+
 # Output object that hold all results variables
 class BayesENproteomics:
 
@@ -57,7 +58,46 @@ class BayesENproteomics:
                    impute='ami',
                    reassign_unreviewed=True):
 
-        bayeslm = fitProteinModels
+        self.preprocessData(normalisation_peptides,
+                            experimental_peptides,
+                            organism,
+                            pepmin,
+                            othermains_bysample,
+                            othermains_bypeptide,
+                            regression_method,
+                            normalisation_method,
+                            ProteinGrouping,
+                            peptide_BHFDR,
+                            nDB,
+                            ContGroup,
+                            impute,
+                            reassign_unreviewed)
+
+        self.doProteinAnalysis(otherinteractors,
+                                pepmin,
+                                incSubject,
+                                subQuantadd,
+                                self.form,
+                                random_effects,
+                                nChains)
+
+        self.doPathwayAnalysis(nChains)
+
+    def preprocessData(self, normalisation_peptides,
+                        experimental_peptides,
+                        organism,
+                        pepmin,
+                        othermains_bysample = '',
+                        othermains_bypeptide = '',
+                        regression_method = 'protein',
+                        normalisation_method='median',
+                        ProteinGrouping=False,
+                        peptide_BHFDR=0.2,
+                        nDB=1,
+                        ContGroup=[],
+                        impute='ami',
+                        reassign_unreviewed=True):
+
         if regression_method == 'dataset':
             #otherinteractors['Protein_'] = 'Treatment'
             print('dataset method not supported in version 1.2.0 or higher, switching to protein method')
@@ -84,7 +124,7 @@ class BayesENproteomics:
         self.UniProt = UniProt
         self.longtable = longtable
 
-        if self.form == 'maxquant':
+        if self.form == 'maxquant' or self.form == 'peaks':
             input_table = pd.DataFrame({'group number':nGroups,
                                         'run number':nRuns,
                                         'minimum peptides':pepmin,
@@ -114,22 +154,33 @@ class BayesENproteomics:
         self.UniProt.to_csv(self.output_name+'\\UniProt.csv', encoding='utf-8', index=False,header=UniProt.columns)
         self.longtable.to_csv(self.output_name+'\\longtable.csv', encoding='utf-8', index=False,header=longtable.columns)
 
+
+    def doProteinAnalysis(self, otherinteractors = {},
+                            pepmin=3,
+                            incSubject=False,
+                            subQuantadd = [''],
+                            form='progenesis',
+                            random_effects='all',
+                            nChains=3):
+
+        bayeslm = fitProteinModels
         # Protein qunatification: fit protein or dataset model
-        protein_summary_quant, PTM_summary_quant, isoform_summary_quant, protein_subject_quant, PTM_subject_quant, models, allValues, missingValues = bayeslm(longtable,
+        protein_summary_quant, PTM_summary_quant, isoform_summary_quant, protein_subject_quant, PTM_subject_quant, models, allValues, missingValues = bayeslm(self.longtable,
                                                                                                                                                               otherinteractors,
                                                                                                                                                               incSubject,
                                                                                                                                                               subQuantadd,
-                                                                                                                                                              nGroups,
-                                                                                                                                                              nRuns,
-                                                                                                                                                              pepmin,
+                                                                                                                                                              self.input_table['group number'][0],
+                                                                                                                                                              self.input_table['run number'][0],
+                                                                                                                                                              self.input_table['minimum peptides'][0],
                                                                                                                                                               random_effects,
                                                                                                                                                               nChains)
         protein_list = list(protein_summary_quant.iloc[:,0].values.flatten())
         protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
 
         self.input_table['Variables used in subject quantification'] = pd.Series(subQuantadd)
-        self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
+        self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=self.input_table.columns)
         self.missingValues = missingValues
+        self.missingValues.columns = self.peptides_used.columns[12:]
         self.missingValues.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missingValues.columns)
 
         # Append protein information used in pathway analysis
@@ -145,6 +196,7 @@ class BayesENproteomics:
             protein_info = protein_info.append(protein_ids.iloc[0,:])
 
         self.allValues = allValues
+        self.allValues.columns = self.allValues.columns[12:]
         self.protein_summary_quant = pd.concat((protein_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
         self.protein_summary_quant = EBvar(self.protein_summary_quant)[0] # Empirical Bayes variance correction
         self.protein_summary_quant.to_csv(self.output_name+'\\protein_summary_quant.csv', encoding='utf-8', index=False,header=self.protein_summary_quant.columns)
@@ -154,7 +206,7 @@ class BayesENproteomics:
 
         if PTM_summary_quant.shape[0] > 0:
             protein_list = list(PTM_summary_quant.iloc[:,1].values.flatten())
-            protein_info = pd.DataFrame(columns = UniProt.columns[[0,2,-2]])
+            protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
             for protein in protein_list:
                 protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
                 if np.any(protein_info_idx):
@@ -178,7 +230,7 @@ class BayesENproteomics:
             subQuant = self.protein_subject_quant
 
         protein_list = list(isoform_summary_quant.iloc[:,0].values.flatten())
-        protein_info = pd.DataFrame(columns = UniProt.columns[[0,2,-2]])
+        protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
         for protein in protein_list:
             protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
             if np.any(protein_info_idx):
@@ -194,14 +246,16 @@ class BayesENproteomics:
         self.isoform_summary_quant = EBvar(self.isoform_summary_quant)[0] # Empirical Bayes variance correction
         self.isoform_summary_quant.to_csv(self.output_name+'\\isoform_summary_quant.csv', encoding='utf-8', index=False,header=self.isoform_summary_quant.columns)
 
+
+    def doPathwayAnalysis(self, nChains = 3):
         # Pathway quantification: fit pathway models
         pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant,
                                                                            self.UniProt,
-                                                                           organism,
-                                                                           longtable,
-                                                                           nRuns,
+                                                                           self.input_table['organism'][0],
+                                                                           self.longtable,
+                                                                           self.input_table['run number'][0],
                                                                            False,
-                                                                           subQuant,
+                                                                           self.protein_subject_quant,
                                                                            self.update_databases,
                                                                            nChains)
         if pathway_summary_quant.shape[0] > 0:
@@ -673,7 +727,11 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         pathwaymdl = weighted_bayeslm_multi(X,Y,parameterIDs,doWeights,SEs,np.array([]),0,[],nChains)
         results = pathwaymdl['beta_estimate']
         SEMs = pathwaymdl['SEMs']
-        dof = n-1#pathwaymdl['dof']
+        dof = n-1
+        #if not subjectQuant.empty:
+        #    dof = pathwaymdl['dof']
+        #else:
+        #    dof = n-1#pathwaymdl['dof']
 
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
@@ -747,8 +805,14 @@ def formatData(normpeplist,
         e_peplist,GroupNames,runIDs,RA,nEntries,nRuns = Progenesis2BENP(exppeplist)
     elif form == 'maxquant':
         e_peplist,GroupNames,runIDs,RA,nEntries,nRuns = MaxQuant2BENP(exppeplist)
+    elif form == 'peaks':
+        e_peplist,GroupNames,runIDs,RA,nEntries,nRuns = PEAKS2BENP(exppeplist)
+    else:
+        msg = 'form must be ''progenesis'' (default), ''peaks'' or ''maxquant''.'
+        raise InputError(form,msg)
 
-        #Convert MaxQuant protein names to UniProt Accession codes
+    if form == 'maxquant' or form == 'peaks':
+        #Convert MaxQuant/PEAKS protein names to UniProt Accession codes
         accessions = pd.DataFrame(data = ['']*e_peplist.shape[0], columns = ['Accession'])
         for n,name in zip(e_peplist.index,e_peplist['Accession']):
             #print(n,uniprotID)
@@ -763,11 +827,6 @@ def formatData(normpeplist,
             accessions.iloc[n] = accession
             print(n, accession)
         e_peplist['Accession'] = accessions
-    elif form == 'peaks':
-        e_peplist,GroupNames,runIDs,RA,nEntries,nRuns = PEAKS2BENP(exppeplist)
-    else:
-        msg = 'form must be ''progenesis'' (default), ''peaks'' or ''maxquant''.'
-        raise InputError(form,msg)
 
     if normpeplist != exppeplist:
         #print('Importing peptide lists:', normpeplist, exppeplist)
@@ -1099,7 +1158,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'F1MAM6_RAT':
+        if protein == 'G3V6H2_RAT':
             v=1
             continue
         if v==0:
@@ -1616,11 +1675,15 @@ def getUniprotdata(species, download = True):
 
     return updf, upcol
 
-# Import PEAKS 10 protein-peptide.csv output from PEAKS label-free quant
+# Import PEAKS 10 protein-peptide.csv output from PEAKS label-free quant and protein-peptide.csv outputs from PEAKS DB, PEAKS PTM and SPIDER searches
+# Before exporting from PEAKS, remember to set all filters (Score, -10lgP. etc) to zero to get all peptides, not just the ones PEAKS thinks are good.
 def PEAKS2BENP(peplist):
 
     print('Importing',peplist,'peptide list: ')
-    PEAKSdf = pd.read_csv(peplist)
+    PEAKSdf = pd.read_csv(peplist[0])
+    DBdf = pd.read_csv(peplist[1])
+    PTMdf = pd.read_csv(peplist[2])
+    SPIDERdf = pd.read_csv(peplist[3])
 
     #find where intensity columns belonging
     intensity_begin = int(np.where([i == 'Avg. Area' for i in PEAKSdf.columns])[0]+1)
@@ -1628,47 +1691,68 @@ def PEAKS2BENP(peplist):
     intensity_cols = PEAKSdf[PEAKSdf.columns[intensity_begin:intensity_end]] #replace 'intensity' with some other identifier for these columns
 
     #find column with peptide sequence, modifications, accession, charge, PEP, peptideID, etc
-    Proteins = PEAKSdf[['Protein Group','Protein ID','Used','Candidate','Start','Quality','Avg. ppm','Significance','Peptide','Avg. Area','Protein Accession','PTM']]
+    Proteins = PEAKSdf[['Protein Group','Protein ID','Used','Candidate','Start','Quality','Avg. ppm','Significance','Peptide','PTM','Protein Accession','Avg. Area']]
     Proteins = Proteins.rename(columns={'Protein Group':'Reviewed?','Protein Accession': 'Accession', 'Used':'Charge', 'PTM':'Modifications','Quality':'ProteinSequence','Protein ID':'PeptideID','Peptide':'Sequence','Significance':'Score'})
 
     # Make progenesis-style peptide sequence and PTM summary for each peptide
     for i in range(Proteins.shape[0]):
+        #if i < 22497:
+        #    continue
         peptide_seq = Proteins['Sequence'].iloc[i]
-        peptide_seq = peptide_seq[2:-2]
-        print(peptide_seq)
-        try:
-            split_seq = re.split('\(.+?\)',peptide_seq)
-        except:
-            split_seq = dc(peptide_seq)
-        temp_seq = ''
-        for j in split_seq:
-            temp_seq = temp_seq + j
-        print(temp_seq)
-        Proteins['Sequence'].iloc[i] = temp_seq
+        peptide_seq = re.sub('[A-Z]{1,1}[\.](?=.{2,})','',peptide_seq,count=1) #peptide_seq[2:-2][\.][A-Z]
+        peptide_seq = re.sub('(?=.{2,})[\.][A-Z]{1,1}','',peptide_seq,count=1)
+        peptide_seq = peptide_seq
+        escape_seq = re.escape(peptide_seq)
+        reg_seq = '^'+escape_seq+'\..?|\.'+escape_seq+'\..?|\.'+escape_seq+'$'
 
-        if split_seq != peptide_seq:
-            mod_positions = [len(i) for i in split_seq]
-            mod_positions = mod_positions[:-1]
-            print(mod_positions)
-            peptide_mods = Proteins['Modifications'].iloc[i]
+        DBpepseq_finder = DBdf['Peptide'].str.contains(reg_seq)
+        DBascore = DBdf['AScore'].loc[DBpepseq_finder]
+
+        PTMpepseq_finder = PTMdf['Peptide'].str.contains(reg_seq)
+        PTMascore = PTMdf['AScore'].loc[PTMpepseq_finder]
+
+        SPIDERpepseq_finder = SPIDERdf['Peptide'].str.contains(reg_seq)
+        SPIDERascore = SPIDERdf['AScore'].loc[SPIDERpepseq_finder]
+
+        ascore = pd.concat((DBascore,PTMascore,SPIDERascore),axis=0,sort=False)
+        split_seq = re.split('\(.+?\)',peptide_seq)
+        #print(peptide_seq,split_seq,ascore)
+        try:
+            split_ascore = ascore.iloc[0].split(';')
+        except:
             try:
-                mod_types = peptide_mods.split(';')
+                split_ascore = ascore.iloc[0]
             except:
-                mod_types = ''
-            PTMsummary = ''
-            for i in range(len(mod_positions)):
-                PTMsummary = PTMsummary + ' [' + str(mod_positions[i]) + '] ' + mod_types[i]
-            Proteins['Modifications'].iloc[i] = PTMsummary
-            print(PTMsummary)
-    pepdf = pd.concat((Proteins,Intensity_cols),axis=1,sort=False)
-    GroupNames = list(Intensities.columns)
-    runs = list(Intensities.columns)
+                split_ascore = ['']
+
+        temp_seq = ''
+        for j in range(len(split_seq)):
+            temp_seq = temp_seq + split_seq[j]
+
+        PTMsummary = ''
+        mod_types = []
+        mod_positions = []
+        if split_seq != [peptide_seq]:
+            for j in range(len(split_seq)-1):
+                mod_types = mod_types + [split_ascore[j].split(':')[1]]
+                mod_positions = mod_positions + re.findall('[0-9]+',split_ascore[j].split(':')[0])
+                PTMsummary = PTMsummary + ' [' + str(mod_positions[j]) + '] ' + mod_types[j]
+
+        Proteins['Sequence'].iloc[i] = temp_seq
+        Proteins['Modifications'].iloc[i] = PTMsummary
+        peptideID = temp_seq+PTMsummary
+        Proteins['PeptideID'].iloc[i] = peptideID
+        print(i,'/',Proteins.shape[0],peptideID)
+
+    pepdf = pd.concat((Proteins,intensity_cols),axis=1,sort=False)
+    GroupNames = list(intensity_cols.columns)
+    runs = list(intensity_cols.columns)
     for i in range(len(GroupNames)):
         GroupNames[i] = re.sub(r'_([0-9+])','',GroupNames[i])
     #GroupNames = np.unique(GroupNames)
     print(GroupNames)
 
-    return pepdf, GroupNames, runs, intensity_begin, PEAKSdf.shape[0], intensity_cols.shape[1]
+    return pepdf, GroupNames, runs, 12, PEAKSdf.shape[0], intensity_cols.shape[1]
 
 # Import peptide tables from list 'peplist' consisting of a list of MaxQuant peptide .csv tables and associated modification tables
 def MaxQuant2BENP(peplists):
