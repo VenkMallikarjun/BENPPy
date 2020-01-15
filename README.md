@@ -42,7 +42,7 @@ BENPPy can be imported by:
 ::
 
     new_instance = bp.BayesENproteomics(output_name,    # String specifying a folder name within your working directory where output files will be stored (folder will be created if it doesn't already exist).
-                                        form            # Can be either 'progenesis' (default) or 'maxquant' to specify the peptide list input format.
+                                        form            # Can be either 'progenesis' (default) 'peaks' or 'maxquant' to specify the peptide list input format.
                                         update_databases, # Boolean denoting whether to download new versions of UniProt and Reactome, defaults to True.
                                         )
 
@@ -72,6 +72,7 @@ BENPPy can be imported by:
 
 * If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. Do not include spectral counts. 
 * If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant Peptides.txt first and any [PTM]Sites.txt (E.g. `['Peptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'Peptides.txt'`.
+* If `form = 'peaks'` then `experimental peptides` is a list containing the exported protein-peptide.csv lists from PEAKS-LFQ, PEAKS-DB, PEAKS-PTM and PEAKS-SPIDER outputs. E.g.`['protein-peptidesLFQ.csv','protein-peptidesPEAKSDB.csv','protein-peptidesPEAKSPTM.csv','protein-peptidesSPIDER.csv']`. As BENPPy will perfrom FDR filtering on peptide lists, it is important that lists exported from PEAKS are unfiltered. `normalisation peptides` takes the same format except `'protein-peptidesLFQ'` would be replaced with an identically formatted list of peptides to be used for normalisation.
 
 
 *** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in Spyder. The current work-around for this is to run it in an external terminal if `nChains` > 1 is required. 
