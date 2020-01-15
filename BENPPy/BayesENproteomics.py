@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.3.1'
+__version__ = '2.3.3'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -196,7 +196,7 @@ class BayesENproteomics:
             protein_info = protein_info.append(protein_ids.iloc[0,:])
 
         self.allValues = allValues
-        self.allValues.columns = self.allValues.columns[12:]
+        self.allValues.columns = self.peptides_used.columns[12:]
         self.protein_summary_quant = pd.concat((protein_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
         self.protein_summary_quant = EBvar(self.protein_summary_quant)[0] # Empirical Bayes variance correction
         self.protein_summary_quant.to_csv(self.output_name+'\\protein_summary_quant.csv', encoding='utf-8', index=False,header=self.protein_summary_quant.columns)
@@ -1158,12 +1158,12 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'G3V6H2_RAT':
+        if protein == 'Q9WVJ6_RAT':
             v=1
             continue
         if v==0:
             continue
-        '''
+            '''
         start = time.time()
         protein_table = model_table.loc[model_table.loc[:,'Protein'] == protein,:].reset_index(drop=True)
         nPeptides = len(np.unique(protein_table['PeptideSequence']))#1+np.sum(Peptide_i.astype(int))
@@ -1908,6 +1908,8 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
     if nMissing:
         alpha = np.percentile(wY[np.where(Ymissing == False)[0]],prop_MNR*100)
         MNRimpmax = (alpha-meanY)/(stdY+1)
+        if MNRimpmax < -37:
+            MNRimpmax = -37 # Avoid imputed -infs
         if nMR:
             Xmiss = X[Ymissing_i[np.where(MNR == False)[0]],:]   # MNR must be np.array
             XXTYMR = linalg.inv((Xmiss @ Xmiss.T)*np.eye(nMR))
@@ -1930,7 +1932,9 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
         # beta_estimate from conditional multivariate_normal
         L = linalg.inv(np.diag((lambda_ridge+tau_vector).ravel())+XtX)
         C = L*sigma2#+(np.eye(p)*0.00001)
-
+        #if do_weights:
+        #    print(i,np.linalg.eigvals(C)[164])
+        #    print(np.where(C[164]<0))
         #if np.linalg.det(C) < 0:
         #    C = C + np.eye(p)*0.01
         A = np.ndarray.flatten(L @ (wX.T @ wY))
@@ -2002,7 +2006,7 @@ def weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_eff
 def weighted_bayeslm_multi(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,nChains,nIter = 1500, nBurn = 750):
 
     if nChains == 1:
-        mdl = weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,1500,750,1304,[])
+        mdl = weighted_bayeslm(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,1500,750,1,[])
         return mdl
 
     Y_missing = np.isnan(Y)
