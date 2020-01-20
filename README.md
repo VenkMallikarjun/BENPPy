@@ -75,6 +75,9 @@ BENPPy can be imported by:
 * If `form = 'peaks'` then `experimental peptides` is a list containing the exported protein-peptide.csv lists from PEAKS-LFQ, PEAKS-DB, PEAKS-PTM and PEAKS-SPIDER outputs. E.g.`['protein-peptidesLFQ.csv','protein-peptidesPEAKSDB.csv','protein-peptidesPEAKSPTM.csv','protein-peptidesSPIDER.csv']`. As BENPPy will perfrom FDR filtering on peptide lists, it is important that lists exported from PEAKS are unfiltered. `normalisation peptides` takes the same format except `'protein-peptidesLFQ'` would be replaced with an identically formatted list of peptides to be used for normalisation.
 
 
+** For MaxQuant and PEAKS files, ensure that the identifier for each sample is the same for samples belonging to the same treatment group. E.g. For MaxQuant in peptides.txt or PEAKS in protein-peptidesLFQ.csv, a list of headers for 6 columns of peptide intensites corresponding to 6 different samples from 2 treatment groups should be, for instance: `['IntensityGroup1','IntensityGroup1','IntensityGroup1','IntensityGroup2','IntensityGroup2','IntensityGroup2']`.
+
+
 *** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in Spyder. The current work-around for this is to run it in an external terminal if `nChains` > 1 is required. 
 
 
