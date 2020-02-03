@@ -67,6 +67,8 @@ BENPPy can be imported by:
                             ContGroup,              # Bool denoting whether treatment variable specified in experimental_peptides headers is treated as a single continuous variable rather than multiple levels of a categorical variable. Defaults to False.
                             random_effects,         # List of strings denoting which effects will be sampled from a Gaussian with a mean of 0. E.g. ['Peptide','Donor']. Defaults to ['All'].
                             nChains,                # Integer denoting how many chains to run for each protein. Chains are run in parallel. Defaults to 3.
+                            impute,                 # String denoting which imputation method to use. Accepts either 'ami' (Adaptive Multiple Imputation; default) or 'dgd' (Down-shifted Gaussian Distribution imputation).
+                            reassign_unreviewed     # Bool denoting whether to reassign peptides from unreviewed proteins to most abundant (by peptide number) reviewed protein if sequences match. Defaults to True.
                             )
 
 
