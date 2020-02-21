@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.3.3'
+__version__ = '2.4.1'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -148,11 +148,11 @@ class BayesENproteomics:
 
         self.input_table = input_table
         self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
-        self.peptides_used.to_csv(self.output_name+'\\peptides_used.csv', encoding='utf-8', index=False,na_rep='nan',header=peptides_used.columns)
+        self.peptides_used.to_csv(self.output_name+'\\peptides_used.tab', encoding='utf-8', sep="\t", index=False,na_rep='nan',header=peptides_used.columns)
         #self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=input_table.columns)
         #self.missing_peptides_idx.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missing_peptides_idx.columns)
-        self.UniProt.to_csv(self.output_name+'\\UniProt.csv', encoding='utf-8', index=False,header=UniProt.columns)
-        self.longtable.to_csv(self.output_name+'\\longtable.csv', encoding='utf-8', index=False,header=longtable.columns)
+        self.UniProt.to_csv(self.output_name+'\\UniProt.tab', encoding='utf-8', sep="\t", index=False,header=UniProt.columns)
+        self.longtable.to_csv(self.output_name+'\\longtable.tab', encoding='utf-8', sep="\t", index=False,header=longtable.columns)
 
 
     def doProteinAnalysis(self, otherinteractors = {},
@@ -180,7 +180,10 @@ class BayesENproteomics:
         self.input_table['Variables used in subject quantification'] = pd.Series(subQuantadd)
         self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=self.input_table.columns)
         self.missingValues = missingValues
-        self.missingValues.columns = self.peptides_used.columns[12:]
+        if self.form == 'progenesis':
+            self.missingValues.columns = self.peptides_used.columns[13:]
+        else:
+            self.missingValues.columns = self.peptides_used.columns[11:]
         self.missingValues.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missingValues.columns)
 
         # Append protein information used in pathway analysis
@@ -195,8 +198,9 @@ class BayesENproteomics:
 
             protein_info = protein_info.append(protein_ids.iloc[0,:])
 
+        #allValues.set_axis(['protein','peptide']+list(self.peptides_used.columns)[12:],axis=1,inplace=True)
         self.allValues = allValues
-        self.allValues.columns = self.peptides_used.columns[12:]
+        #self.allValues.columns[2:] = self.peptides_used.columns[12:]
         self.protein_summary_quant = pd.concat((protein_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
         self.protein_summary_quant = EBvar(self.protein_summary_quant)[0] # Empirical Bayes variance correction
         self.protein_summary_quant.to_csv(self.output_name+'\\protein_summary_quant.csv', encoding='utf-8', index=False,header=self.protein_summary_quant.columns)
@@ -268,10 +272,10 @@ class BayesENproteomics:
 
     # Load exproted BayeENproteomics object from 'output_name' folder made during its creation
     def load(self):
-        UniProt = pd.read_table(self.output_name+'\\UniProt.csv',sep = ',')
-        peptides_used = pd.read_table(self.output_name+'\\peptides_used.csv',sep = ',')
+        UniProt = pd.read_table(self.output_name+'\\UniProt.tab',sep = '\t')
+        peptides_used = pd.read_table(self.output_name+'\\peptides_used.tab',sep = '\t')
         input_table = pd.read_table(self.output_name+'\\input_table.csv',sep = ',')
-        longtable = pd.read_table(self.output_name+'\\longtable.csv',sep = ',')
+        longtable = pd.read_table(self.output_name+'\\longtable.tab',sep = '\t')
         self.UniProt = UniProt
         self.peptides_used = peptides_used
         self.input_table = input_table
@@ -428,7 +432,7 @@ class BayesENproteomics:
 
             axes[0,plot].plot(np.array([-100, 100]),np.array([-np.log10(0.05),-np.log10(0.05)]),color='black',linestyle='dashed')
             axes[0,plot].set_ylabel(r'${-Log_1}_0 (BHFDR)$')
-            axes[0,plot].set_ylim((0,15))
+            axes[0,plot].set_ylim((0,100))
 
     def pca(self,plot_type = 'protein', residue = 'any', dim = 2, annotate = True):
 
@@ -441,6 +445,10 @@ class BayesENproteomics:
 
         if plot_type == 'protein':
             o = self.protein_subject_quant.iloc[:,0:nRuns].transpose()
+        elif plot_type == 'peptide':
+            o = np.array(self.allValues.iloc[1:,2:].transpose())
+            #missingidx = np.array(self.missing_peptides_idx.iloc[1:,:].transpose())==True
+            #o[missingidx] = np.nan
         elif plot_type == 'ptm':
             o = self.PTM_subject_quant.iloc[:,0:nRuns].transpose()
         else:
@@ -844,7 +852,7 @@ def formatData(normpeplist,
         GroupIDs = set(['Continuous variable'])
         nGroups = 2
     else:
-        if form == 'maxquant':
+        if form == 'maxquant' or form == 'peaks':
             for i in range(len(GroupNames)):
                 GroupNames[i] = re.sub(r'(\.[0-9+])','',GroupNames[i])
 
@@ -862,19 +870,26 @@ def formatData(normpeplist,
         nPmains = e_mainpeptideeffects.shape[1]
 
     #header = e_peplist.iloc[0:1,:];
+    e_length = e_peplist.shape[0]
+    scores = e_peplist['Score']
+    scores[scores == '---'] = np.nan
+    scorebf = (np.log10(1/(20*e_length)) * -10) - 13
+    pepID_p = 10**(np.array(scores, dtype=float)/-10)
     if form == 'progenesis':
-        e_length = e_peplist.shape[0]
+        #e_length = e_peplist.shape[0]
         scores = np.array(e_peplist.iloc[2:,7], dtype = object)
-        scores[scores == '---'] = np.nan #Progenesis-specific
+        scores[scores == '---'] = np.nan
         #print(np.array(scores, dtype=float))
-        scorebf = (np.log10(1/(20*(e_length - 2))) * -10) - 13 #Specific to Mascot scores
-    else:
-        e_length = e_peplist.shape[0]
-        scores = e_peplist['Score']
-        scorebf = (np.log10(1/(20*e_length)) * -10) - 13
+        scorebf = (np.log10(1/(20*(e_length - 2))) * -10) - 13
+        pepID_p = 10**(np.array(scores, dtype=float)/-10) #Transform Mascot scores back to p-values
+    elif form == 'maxquant':
+        pepID_p = np.array(scores, dtype=float)
+        e_peplist['Score'] = (np.log10(e_peplist['Score']) * -10)
+
     #print(scorebf)
-    pepID_p = 10**(np.array(scores, dtype=float)/-10) #Transform Mascot scores back to p-values
+
     pepID_fdr = bhfdr(pepID_p)
+    print(pepID_fdr)
     #e_peplist = pd.concat([header,e_peplist.iloc[3:,:].loc[pepID_fdr < scorethreshold,:]])
     if othermains_bypeptide != '':
         e_mainpeptideeffects = pd.concat([e_mainpeptideeffects,e_peplist['Accession']],axis=1)
@@ -918,12 +933,16 @@ def formatData(normpeplist,
         review_status = uniprotall.loc[uniprot_find,uniprotall.columns[-1]]
         protein_id = uniprotall.loc[uniprot_find,uniprotall.columns[[upcol,1]]]
         protein_sequence = uniprotall.loc[uniprot_find,uniprotall.columns[10]]
-        e_peplist.loc[protein_find,e_peplist.columns[1]] = e_peplist.loc[protein_find,e_peplist.columns[[8,9]]].astype(str).sum(axis=1)
-        e_peplist.loc[protein_find,e_peplist.columns[2]] = e_peplist.loc[protein_find,e_peplist.columns[gene_col+int(not ProteinGrouping)*4]]
+        #e_peplist.loc[protein_find,e_peplist.columns[1]] = e_peplist.loc[protein_find,e_peplist.columns[[8,9]]].astype(str).sum(axis=1)
+        e_peplist['PeptideID'].loc[protein_find] = e_peplist[['Sequence','Modifications']].astype(str).sum(axis=1)
+        #e_peplist.loc[protein_find,e_peplist.columns[2]] = e_peplist.loc[protein_find,e_peplist.columns[gene_col+int(not ProteinGrouping)*4]]
+        e_peplist['Charge'].loc[protein_find] = e_peplist.loc[protein_find,e_peplist.columns[gene_col+int(not ProteinGrouping)*4]]
         if protein_sequence.shape[0] > 0:
-            e_peplist.loc[protein_find,e_peplist.columns[5]] = np.tile(protein_sequence,(int(np.sum(protein_find)),1)).flatten()
+            #e_peplist.loc[protein_find,e_peplist.columns[5]] = np.tile(protein_sequence,(int(np.sum(protein_find)),1)).flatten()
+            e_peplist['ProteinSequence'].loc[protein_find] = np.tile(protein_sequence,(int(np.sum(protein_find)),1)).flatten()
         else:
-            e_peplist.loc[protein_find,e_peplist.columns[5]] = np.tile([''],(int(np.sum(protein_find)),1)).flatten()
+            #e_peplist.loc[protein_find,e_peplist.columns[5]] = np.tile([''],(int(np.sum(protein_find)),1)).flatten()
+            e_peplist['ProteinSequence'].loc[protein_find] = np.tile([''],(int(np.sum(protein_find)),1)).flatten()
 
         #if len(protein_id.index):
         try:
@@ -934,7 +953,7 @@ def formatData(normpeplist,
             e_peplist.loc[protein_find,e_peplist.columns[[gene_col,10]]] = protein_name
             review_status = 'unreviewed'
 
-        e_peplist.iloc[ii:,0] = review_status
+        e_peplist['Reviewed?'].iloc[ii] = review_status
         print('#',ii,'-',ii+int(np.sum(protein_find)),'/',e_length, protein_name, review_status)
         ii = ii + int(np.sum(protein_find))
 
@@ -942,17 +961,17 @@ def formatData(normpeplist,
     e_peplist = e_peplist.sort_values(by=['Score'])
 
     # Do normalisation to median intensities of specified peptides
-    if normmethod == 'median':
+    if normmethod == 'median' or normmethod == 'quantile':
         e_peplist.iloc[:,RA:] = np.log2(e_peplist.iloc[:,RA:].astype(float))
         if form == 'progenesis':
             norm_intensities = np.log2(n_peplist.iloc[2:,RA:].astype(float))
         else:
             norm_intensities = np.log2(n_peplist.iloc[:,RA:].astype(float))
-        normed_peps = normalise(e_peplist.iloc[:,RA:].astype(float),norm_intensities)
+        normed_peps = normalise(e_peplist.iloc[:,RA:].astype(float),norm_intensities,normmethod)
         normed_peps[np.isinf(normed_peps)] = np.nan
     elif normmethod == 'none':
         print('No normalisation used!')
-        normed_peps = e_peplist.iloc[:,RA:].astype(float)
+        normed_peps = np.log2(e_peplist.iloc[:,RA:].astype(float))
         normed_peps[np.isinf(normed_peps)] = np.nan
     e_peplist.iloc[:,RA:] = np.array(normed_peps)
 
@@ -1002,7 +1021,7 @@ def formatData(normpeplist,
             reviewed_prot_findidx = np.where(reviewed_prot_find)[0]
             if reviewed_prot_findidx.any():
                 new_protein_ids = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[[1+int(ProteinGrouping)*10,upcol]]]
-                new_protein_seq = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[10]]
+                new_protein_seq = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[12]]
                 is_present = np.zeros([e_length,new_protein_ids.shape[0]])
                 for ii in range(new_protein_ids.shape[0]):
                     #Reassign to proteins already in dataset if possible
@@ -1014,8 +1033,8 @@ def formatData(normpeplist,
                 if ic != np.amin(is_present) or is_present.size == 1:
                     #print(pep_info.loc[:,pep_info.columns[[10,6]]],new_protein_ids.iloc[ia,:])
                     pep_info.loc[:,pep_info.columns[[10,6]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1)))
-                    pep_info.iloc[:,0] = ['reviewed']*nP
-                    pep_info.iloc[:,5] = np.array(np.tile(new_protein_seq.iloc[0],(nP,1)))
+                    pep_info['Reviewed?'] = ['reviewed']*nP
+                    pep_info['ProteinSequence'] = np.array(np.tile(new_protein_seq.iloc[0],(nP,1)))
                     e_peplist.loc[pep_find,e_peplist.columns[[10,gene_col]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1))) #Record which entries have been altered
 
         protein_names = pep_info.iloc[:,gene_col+int(not ProteinGrouping)*4]
@@ -1080,14 +1099,18 @@ def formatData(normpeplist,
     subject = np.tile(np.array(runIDs),(1,(q-1))).flatten(order='F')
 
     # Peptide effects
-    Peptides = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[1]]),(len(runIDs),1)).flatten(order='F')
+    #Peptides = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[1]]),(len(runIDs),1)).flatten(order='F')
+    Peptides = np.tile(np.array(final_peplist['PeptideID']),(len(runIDs),1)).flatten(order='F')
 
     # Get peptide and protein sequences for counting unique (by sequence) peptides for each protein and locating PTMs
-    PeptideSequence = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[8]]),(len(runIDs),1)).flatten(order='F')
-    ProteinSequence = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[5]]),(len(runIDs),1)).flatten(order='F')
+    #PeptideSequence = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[8]]),(len(runIDs),1)).flatten(order='F')
+    PeptideSequence = np.tile(np.array(final_peplist['Sequence']),(len(runIDs),1)).flatten(order='F')
+    #ProteinSequence = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[5]]),(len(runIDs),1)).flatten(order='F')
+    ProteinSequence = np.tile(np.array(final_peplist['ProteinSequence']),(len(runIDs),1)).flatten(order='F')
 
     # FDR-adjusted Mascot (or other metric of peptide identity confidence) scores
-    Scores = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[7]].astype(float)/scorebf),(len(runIDs),1)).flatten(order='F')
+    #Scores = np.tile(np.array(final_peplist.loc[:,final_peplist.columns[7]].astype(float)/scorebf),(len(runIDs),1)).flatten(order='F')
+    Scores = np.tile(np.array(final_peplist['Score'].astype(float)/scorebf),(len(runIDs),1)).flatten(order='F')
     Scores[Scores > 1] = 1
 
     Proteins = np.tile(np.array(final_peplist.iloc[:,gene_col+int(not ProteinGrouping)*4]),(len(runIDs),1)).flatten(order='F')
@@ -1097,11 +1120,11 @@ def formatData(normpeplist,
     model_table = pd.DataFrame({'Protein':Proteins,
                                 'Peptide':Peptides,
                                 'PeptideSequence':PeptideSequence,
-                                'ProteinSequence':ProteinSequence,
                                 'Score':Scores,
                                 'Treatment':Groups,
                                 'Subject':subject,
-                                'Intensities':Intensities},
+                                'Intensities':Intensities,
+                                'ProteinSequence':ProteinSequence},
                                 index = list(range(q*len(runIDs)-len(runIDs))))
 
     # convert to categorical to save memory
@@ -1112,11 +1135,12 @@ def formatData(normpeplist,
 
     if form == 'maxquant':
         ContaminantsNReverses = pd.DataFrame({'Potential contaminant':np.tile(np.array(final_peplist['Potential contaminant']),(len(runIDs),1)).flatten(order='F'),
-                                            'Reverse':np.tile(np.array(final_peplist['Reverse']),(len(runIDs),1)).flatten(order='F')},
+                                            'Reverse':np.tile(np.array(final_peplist['Reverse']),(len(runIDs),1)).flatten(order='F'),
+                                            'Unique':np.tile(np.array(final_peplist['Unique (Proteins)']),(len(runIDs),1)).flatten(order='F')},
                                             index = model_table.index)
         model_table = pd.concat([model_table,ContaminantsNReverses],axis=1,sort = False)
         #print(model_table.columns.values)
-        model_table = model_table.loc[(model_table['Potential contaminant'] != '+') & (model_table['Reverse'] != '+')]
+        model_table = model_table.loc[(model_table['Potential contaminant'] != '+') & (model_table['Reverse'] != '+') & (model_table['Unique'] == 'yes')]
         #model_table = model_table.loc[,:]
 
     if regression_method == 'dataset':
@@ -1124,7 +1148,11 @@ def formatData(normpeplist,
         model_table = pd.concat([protein_matrix,model_table],axis=1,sort = False)
         #print(model_table.columns)
 
-    return final_peplist, model_table, uniprotall, nGroups, nRuns
+    if impute == 'none':
+        model_table = model_table.loc[model_table['Intensities'].notnull()]
+
+    # Need to remove ProteinSequence for table or make it last column otherwise long protein sequences (e.g. TITIN) fuck up export to .tab and .csv
+    return final_peplist.iloc[:,final_peplist.columns != 'ProteinSequence'], model_table, uniprotall, nGroups, nRuns
 
 # Model fitting function; fits individual models for each protein
 def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin,random_effects,nChains):
@@ -1149,8 +1177,8 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     SubjectLevelColumnNames = quantTableNameConstructor(s,nRuns,isSubjectLevelQuant = True)
     SubjectLevelProteinQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
     SubjectLevelPTMQuant = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
-    allValues = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
-    missingValues = pd.DataFrame(columns = SubjectLevelColumnNames,index=[-1])
+    allValues = pd.DataFrame(columns = ['protein','peptide']+list(model_table['Subject'].iloc[0:nRuns]),index=[-1])
+    missingValues = pd.DataFrame(columns = list(model_table['Subject'].iloc[0:nRuns]),index=[-1])
 
     #Fit protein models
     print('Fitting protein models...')
@@ -1158,17 +1186,21 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'Q9WVJ6_RAT':
+        if protein == 'MESD_RAT':
             v=1
             continue
-        if v==0:
+
+        if v>10:
             continue
+        else:
+            v += 1
             '''
         start = time.time()
         protein_table = model_table.loc[model_table.loc[:,'Protein'] == protein,:].reset_index(drop=True)
-        nPeptides = len(np.unique(protein_table['PeptideSequence']))#1+np.sum(Peptide_i.astype(int))
+        nPeptides = len(np.unique(protein_table['PeptideSequence']))
+        nPeptides2 = len(np.unique(protein_table['Peptide']))
 
-        if nPeptides < pepmin or protein == '':# or nPeptides > 10:
+        if nPeptides < pepmin or protein == '':
             continue #Skip proteins with fewer than pepmin peptides in dataset or those composed of unassigned peptides
         #v = 1
         #Create design matrix (only add Treatment:Peptides interactions if more than 2 peptides)
@@ -1213,6 +1245,8 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         SEMs = proteinmdl['SEMs']
         dof = proteinmdl['dof']
         Rhatmax = [np.nanmax(proteinmdl['Rhat'])]
+        #Yimputed = Y
+        #if sum(missing) > 0:
         Yimputed = proteinmdl['Yimputed'].reshape((-1,nRuns))
         #RhathatParam = parameterIDs[np.argmax(proteinmdl['Rhat'])]
 
@@ -1221,7 +1255,10 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
         ProteinQuant = ProteinQuant.append(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
-        allValues = allValues.append(pd.DataFrame(data=Yimputed,columns=allValues.columns),ignore_index=True,sort=False)
+
+        peptideIDs = np.array(protein_table['Peptide']).reshape((Yimputed.shape[0],-1))[:,0].reshape((Yimputed.shape[0],1))
+        allValuesRows = np.concatenate((np.array([protein]*Yimputed.shape[0]).reshape((Yimputed.shape[0],1)),peptideIDs,Yimputed),axis=1)
+        allValues = allValues.append(pd.DataFrame(data=allValuesRows,columns=allValues.columns),ignore_index=True,sort=False)
         missingValues = missingValues.append(pd.DataFrame(data=missing.reshape((-1,nRuns)),columns=missingValues.columns),ignore_index=True,sort=False)
 
         # Sort out treatment:peptide interaction effects
@@ -1626,14 +1663,25 @@ def quantTableNameConstructor(group_names,nRuns,isSubjectLevelQuant = False):
 
     return column_names
 
-# Median normalisation for peptide intensities to specified set of peptides
-def normalise(X,Z=[]):
-    if not Z.empty:
-        median_Z = np.nanmedian(Z,axis=0)
-        print(median_Z)
-    else:
-        median_Z = np.nanmedian(X,axis=0)
-    normalised_X = X - median_Z
+# Median  or quantile normalisation for peptide intensities to specified set of peptides
+def normalise(X,Z=[],method='median'):
+    if method == 'median':
+        if not Z.empty:
+            median_Z = np.nanmedian(Z,axis=0)
+            print(median_Z)
+        else:
+            median_Z = np.nanmedian(X,axis=0)
+        normalised_X = X - median_Z
+    elif method == 'quantile':
+        if not Z.empty:
+            Zdf = pd.DataFrame(data=Z)
+            rank_mean = Zdf.stack().groupby(Zdf.rank(method='average',na_option='top').stack().astype(int)).mean()
+        else:
+            rank_mean = X.stack().groupby(X.rank(method='average',na_option='top').stack().astype(int)).mean()
+        #rank_mean[np.isinf(rank_mean)] = 0
+        print(rank_mean)
+        normalised_X = X.rank(method='average').stack().astype(int).map(rank_mean).unstack()
+
     return normalised_X
 
 # Generic Benjamini-Hochberg p-value corrector for vector of p-values p
@@ -1655,13 +1703,13 @@ def getUniprotdata(species, download = True):
     upcol = 11
     if download:
         if species == 'human':
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000005640&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,sequence,genes(PREFERRED),reviewed'
+            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000005640&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
             upcol = 11
         elif species == 'mouse':
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000000589&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,sequence,genes(PREFERRED),database(MGI),reviewed'
+            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000000589&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),database(MGI),reviewed,sequence'
             upcol = 12
         else:
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:'+species+'&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,sequence,genes(PREFERRED),reviewed'
+            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:'+species+'&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
             upcol = 12
 
         request = urllib.request.Request(url)
@@ -1699,6 +1747,7 @@ def PEAKS2BENP(peplist):
         #if i < 22497:
         #    continue
         peptide_seq = Proteins['Sequence'].iloc[i]
+        peptide_seq = re.sub(re.escape('(*)'),'',peptide_seq)
         peptide_seq = re.sub('[A-Z]{1,1}[\.](?=.{2,})','',peptide_seq,count=1) #peptide_seq[2:-2][\.][A-Z]
         peptide_seq = re.sub('(?=.{2,})[\.][A-Z]{1,1}','',peptide_seq,count=1)
         peptide_seq = peptide_seq
@@ -1716,7 +1765,7 @@ def PEAKS2BENP(peplist):
 
         ascore = pd.concat((DBascore,PTMascore,SPIDERascore),axis=0,sort=False)
         split_seq = re.split('\(.+?\)',peptide_seq)
-        #print(peptide_seq,split_seq,ascore)
+
         try:
             split_ascore = ascore.iloc[0].split(';')
         except:
@@ -1734,9 +1783,12 @@ def PEAKS2BENP(peplist):
         mod_positions = []
         if split_seq != [peptide_seq]:
             for j in range(len(split_seq)-1):
-                mod_types = mod_types + [split_ascore[j].split(':')[1]]
-                mod_positions = mod_positions + re.findall('[0-9]+',split_ascore[j].split(':')[0])
-                PTMsummary = PTMsummary + ' [' + str(mod_positions[j]) + '] ' + mod_types[j]
+                try:
+                    mod_types = mod_types + [split_ascore[j].split(':')[1]]
+                    mod_positions = mod_positions + re.findall('[0-9]+',split_ascore[j].split(':')[0])
+                    PTMsummary = PTMsummary + ' [' + str(mod_positions[j]) + '] ' + mod_types[j]
+                except:
+                    continue
 
         Proteins['Sequence'].iloc[i] = temp_seq
         Proteins['Modifications'].iloc[i] = PTMsummary
@@ -1767,10 +1819,10 @@ def MaxQuant2BENP(peplists):
     #print(Intensities.shape)
     #Convert to progenesis format
     try:
-        Proteins = MQdfs[0][['Amino acid before','Protein group IDs','Charges','Potential contaminant','Reverse','PEP','First amino acid','Score','Sequence','Second amino acid','Leading razor protein','Protein Names']]
+        Proteins = MQdfs[0][['Amino acid before','Protein group IDs','Charges','Potential contaminant','Reverse','PEP','First amino acid','Score','Sequence','Second amino acid','Leading razor protein','Unique (Proteins)']]
     except:
-        Proteins = MQdfs[0][['Amino acid before','Protein group IDs','Charges','Potential contaminant','Reverse','PEP','First amino acid','Score','Sequence','Second amino acid','Leading razor protein','Mass']]
-    Proteins = Proteins.rename(columns={'Amino acid before':'Reviewed?','Leading razor protein': 'Accession', 'Charges':'Charge', 'Second amino acid':'Modifications','PEP':'ProteinSequence','Protein group IDs':'PeptideID'})
+        Proteins = MQdfs[0][['Amino acid before','Protein group IDs','Charges','Potential contaminant','Reverse','PEP','First amino acid','Score','Sequence','Second amino acid','Leading razor protein','Unique (Proteins)']]
+    Proteins = Proteins.rename(columns={'Amino acid before':'Reviewed?','Leading razor protein': 'Accession', 'Charges':'Charge', 'Second amino acid':'Modifications','Score':'ProteinSequence','Protein group IDs':'PeptideID', 'PEP':'Score'})
 
     #Get modID indices for searching in PTM tables
     #modIDs = MQdfs[0].iloc[:,-len(MQdfs):-1]
@@ -1852,6 +1904,7 @@ def Progenesis2BENP(peplist):
 
         print(n-2,' peptide (ion)s')
         pepdf = pd.read_csv(peplist,header = 2)
+        pepdf = pepdf.rename(columns={'#':'Reviewed?','Retention time (min)':'PeptideID', 'm/z':'ProteinSequence'})
         return pepdf, GroupNames, runs, RAind, n-2,nRuns
 
 # Weighted Bayesian regression function not typically called by user
