@@ -1,7 +1,7 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.3.3
+version 2.4.1
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
@@ -75,6 +75,7 @@ BENPPy can be imported by:
 * If `form = 'progenesis'` than `experimental_peptides` is simply the peptide (ion)-level output from Progenesis QI, both `experimental_peptides` and `normalisation_peptides` must be formatted the same. Do not include spectral counts. 
 * If `form = 'maxquant'` than `experimental_peptides` is a list containing the MaxQuant Peptides.txt first and any [PTM]Sites.txt (E.g. `['Peptides.txt','Oxidation (M)Sites.txt','Acetylation (K)Sites.txt']`) and `normalisation_peptides` takes the format of `'Peptides.txt'`.
 * If `form = 'peaks'` then `experimental peptides` is a list containing the exported protein-peptide.csv lists from PEAKS-LFQ, PEAKS-DB, PEAKS-PTM and PEAKS-SPIDER outputs. E.g.`['protein-peptidesLFQ.csv','protein-peptidesPEAKSDB.csv','protein-peptidesPEAKSPTM.csv','protein-peptidesSPIDER.csv']`. As BENPPy will perfrom FDR filtering on peptide lists, it is important that lists exported from PEAKS are unfiltered. `normalisation peptides` takes the same format except `'protein-peptidesLFQ'` would be replaced with an identically formatted list of peptides to be used for normalisation.
+* `reassign_unreviewed` should be disabled when analysing complete mixed species datasets (e.g. xenograft models) to avoid peptides from unreviewed proteins in one species being incorrectly assigned to reviewed proteins in the other species. If analysing the species separately (i.e. taking separate lists of species-unique peptides), `reassign_unreviewed` can be left enabled.
 
 
 ** For MaxQuant and PEAKS files, ensure that the identifier for each sample is the same for samples belonging to the same treatment group. E.g. For MaxQuant in peptides.txt or PEAKS in protein-peptidesLFQ.csv, a list of headers for 6 columns of peptide intensites corresponding to 6 different samples from 2 treatment groups should be, for instance: `['IntensityGroup1','IntensityGroup1','IntensityGroup1','IntensityGroup2','IntensityGroup2','IntensityGroup2']`.
