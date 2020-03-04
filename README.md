@@ -1,7 +1,7 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.4.1
+version 2.4.2
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
@@ -127,7 +127,7 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubjec
 
 ::
 
-    newinstance.proteinVSptm(ptm_type,          # String deonting PTM type to graph (as written in peptide list input files).
+    new_instance.proteinVSptm(ptm_type,          # String deonting PTM type to graph (as written in peptide list input files).
                              residue = 'any',   # String containing single-letter amino acid denoting which residues to plot.
                              exp = 1,           # Index for numerator in fold change calculation. Defaults to 1 (i.e. second column).
                              ctrl = 0           # Index for denominator in fold change calculation. Defaults to 0 (i.e. first column).
