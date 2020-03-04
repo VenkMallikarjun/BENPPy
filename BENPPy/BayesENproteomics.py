@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.4.1'
+__version__ = '2.4.2'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -930,9 +930,9 @@ def formatData(normpeplist,
 
         uniprot_find = uniprotall.iloc[:,1].isin([protein_name])
         #uniprot_find.mask(unprot_find == 0)
-        review_status = uniprotall.loc[uniprot_find,uniprotall.columns[-1]]
+        review_status = uniprotall['Status'].loc[uniprot_find]
         protein_id = uniprotall.loc[uniprot_find,uniprotall.columns[[upcol,1]]]
-        protein_sequence = uniprotall.loc[uniprot_find,uniprotall.columns[10]]
+        protein_sequence = uniprotall['Sequence'].loc[uniprot_find]
         #e_peplist.loc[protein_find,e_peplist.columns[1]] = e_peplist.loc[protein_find,e_peplist.columns[[8,9]]].astype(str).sum(axis=1)
         e_peplist['PeptideID'].loc[protein_find] = e_peplist[['Sequence','Modifications']].astype(str).sum(axis=1)
         #e_peplist.loc[protein_find,e_peplist.columns[2]] = e_peplist.loc[protein_find,e_peplist.columns[gene_col+int(not ProteinGrouping)*4]]
@@ -1739,8 +1739,8 @@ def PEAKS2BENP(peplist):
     intensity_cols = PEAKSdf[PEAKSdf.columns[intensity_begin:intensity_end]] #replace 'intensity' with some other identifier for these columns
 
     #find column with peptide sequence, modifications, accession, charge, PEP, peptideID, etc
-    Proteins = PEAKSdf[['Protein Group','Protein ID','Used','Candidate','Start','Quality','Avg. ppm','Significance','Peptide','PTM','Protein Accession','Avg. Area']]
-    Proteins = Proteins.rename(columns={'Protein Group':'Reviewed?','Protein Accession': 'Accession', 'Used':'Charge', 'PTM':'Modifications','Quality':'ProteinSequence','Protein ID':'PeptideID','Peptide':'Sequence','Significance':'Score'})
+    Proteins = PEAKSdf[['Protein Group','Protein ID','Used','Candidate','Start','Significance','Avg. ppm','Quality','Peptide','PTM','Protein Accession','Avg. Area']]
+    Proteins = Proteins.rename(columns={'Protein Group':'Reviewed?','Protein Accession': 'Accession', 'Used':'Charge', 'PTM':'Modifications','Significance':'ProteinSequence','Protein ID':'PeptideID','Peptide':'Sequence','Quality':'Score'})
 
     # Make progenesis-style peptide sequence and PTM summary for each peptide
     for i in range(Proteins.shape[0]):
