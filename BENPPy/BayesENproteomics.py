@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.0'
+__version__ = '2.5.1'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -523,7 +523,7 @@ class BayesENproteomics:
 
         fig.savefig(self.output_name+'\\'+str(dim)+'D-PCA_type='+plot_type+residue+'.pdf', bbox_inches='tight')
 
-    def proteinVSptm(self, ptm_type, residue = 'any', exp = 1, ctrl = 0):
+    def proteinVSptm(self, ptm_type, residue = 'any', exp = 1, ctrl = 0, continuous = False):
         o = self.PTM_summary_quant[self.PTM_summary_quant['PTM type'] == ptm_type]
         if residue != 'any':
             o = o[o['PTMed residue'] == residue]
@@ -532,7 +532,10 @@ class BayesENproteomics:
         proteinfoldchanges = dc(PTMfoldchanges)
 
         for i,j in zip(o['Parent protein'],range(len(o['Parent protein']))):
-            proteinfoldchanges[j] = np.array(self.protein_summary_quant[self.protein_summary_quant['Protein'] == i].iloc[:,4+exp]) - np.array(self.protein_summary_quant[self.protein_summary_quant['Protein'] == i].iloc[:,4+ctrl])
+            if continuous:
+                proteinfoldchanges[j] = np.array(self.protein_summary_quant[self.protein_summary_quant['Protein'] == i].iloc[:,4+exp])
+            else:
+                proteinfoldchanges[j] = np.array(self.protein_summary_quant[self.protein_summary_quant['Protein'] == i].iloc[:,4+exp]) - np.array(self.protein_summary_quant[self.protein_summary_quant['Protein'] == i].iloc[:,4+ctrl])
 
         PTMProt_table = pd.DataFrame({'PTM log2(fold changes)':PTMfoldchanges,'Protein log2(fold changes)':proteinfoldchanges})
         print(PTMProt_table)
