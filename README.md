@@ -1,7 +1,7 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.4.2
+version 2.5.1
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
@@ -68,7 +68,8 @@ BENPPy can be imported by:
                             random_effects,         # List of strings denoting which effects will be sampled from a Gaussian with a mean of 0. E.g. ['Peptide','Donor']. Defaults to ['All'].
                             nChains,                # Integer denoting how many chains to run for each protein. Chains are run in parallel. Defaults to 3.
                             impute,                 # String denoting which imputation method to use. Accepts either 'ami' (Adaptive Multiple Imputation; default) or 'dgd' (Down-shifted Gaussian Distribution imputation).
-                            reassign_unreviewed     # Bool denoting whether to reassign peptides from unreviewed proteins to most abundant (by peptide number) reviewed protein if sequences match. Defaults to True.
+                            reassign_unreviewed,    # Bool denoting whether to reassign peptides from unreviewed proteins to most abundant (by peptide number) reviewed protein if sequences match. Defaults to True.
+                            continuousvars          # List denoting which variables contained in othermains_bysample or othermains_bypeptide are continuous. By default all variables are encoded as categorical.
                             )
 
 
@@ -113,10 +114,11 @@ After `doAnalysis` finishes there will be several new properties added to the in
 * `new_instance.protein_summary_quant` protein-level log2 abundances.
 * `new_instance.ptm_summary_quant` ptm-level log2 abundances.
 * `new_instance.pathway_summary_quant` pathway-level log2 abundances.
+* `new_instance.other_summary_quant` protein-level log2 effect sizes for non-treatment variables
 
 #### Subject-level quantifications
 
-If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubject = True` protein and ptm subject/run-level quantification will be provided in `new_instance.protein_subject_quant` and `new_instance.ptm_subject_quant`, respectively.
+If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubject = True` protein and ptm subject/run-level quantification will be provided in `new_instance.protein_subject_quant` and `new_instance.ptm_subject_quant`, respectively. At the moment, this will only work if the dataset is balanced (i.e. same numbers of samples per group).
 
 ### 4. Quality-control plots:
 
@@ -128,9 +130,10 @@ If `subQuantadd` arguement is used when `doAnalysis` is called, or if `incSubjec
 ::
 
     new_instance.proteinVSptm(ptm_type,          # String deonting PTM type to graph (as written in peptide list input files).
-                             residue = 'any',   # String containing single-letter amino acid denoting which residues to plot.
-                             exp = 1,           # Index for numerator in fold change calculation. Defaults to 1 (i.e. second column).
-                             ctrl = 0           # Index for denominator in fold change calculation. Defaults to 0 (i.e. first column).
+                             residue = 'any',    # String containing single-letter amino acid denoting which residues to plot.
+                             exp = 1,            # Index for numerator in fold change calculation. Defaults to 1 (i.e. second column).
+                             ctrl = 0,           # Index for denominator in fold change calculation. Defaults to 0 (i.e. first column). Ignored if continuous = True.
+                             continuous = False  # Bool denoting whether variable in column indicated by exp is continuous. 
                              )
 
 
@@ -140,10 +143,11 @@ Significance testing comparing all treatments to a single control group can be p
 
 ::
 
-    new_instance.doContrasts(Contrasted,      # String denoting which contrasts to test. Can be either 'protein', 'ptm'or 'pathway'. Defaults to 'protein'.
-                             ctrl,            # Int denoting which column to use as the control group. Defaults to 0, meaning the first column.
+    new_instance.doContrasts(Contrasted,      # String denoting which contrasts to test. Can be either 'protein', 'ptm', 'other' or 'pathway'. Defaults to 'protein'.
+                             ctrl,            # Int denoting which column to use as the control group. Defaults to 0, meaning the first column. Ignored if continuous = True.
                              propagateErrors, # Bool deonting whether to propagate control group errors into experimental group errors (using square root of sum of squares) for t-statistic calculation (Welch's t-test). Defualts to False.
-                             UseBayesFactors  # Bool denoting whether to use Bayes Factors rather than p-values. Still needs testing. Defaults to False.
+                             UseBayesFactors,  # Bool denoting whether to use Bayes Factors rather than p-values. Still needs testing. Defaults to False.
+                             continuous        # Bool denoting whether variable to be contrasted is continuous and test should be only to see if it is significantly different from zero.
                              )
                              
 This will add the `Contrasted` dataframe property to `new_instance` that can be inspected and manipulated by `new_instance.Contrasted`.
