@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.4.2'
+__version__ = '2.5.0'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -56,7 +56,8 @@ class BayesENproteomics:
                    random_effects='all',
                    nChains=3,
                    impute='ami',
-                   reassign_unreviewed=True):
+                   reassign_unreviewed=True,
+                   continuousvars=[]):
 
         self.preprocessData(normalisation_peptides,
                             experimental_peptides,
@@ -79,7 +80,8 @@ class BayesENproteomics:
                                 subQuantadd,
                                 self.form,
                                 random_effects,
-                                nChains)
+                                nChains,
+                                continuousvars)
 
         self.doPathwayAnalysis(nChains)
 
@@ -161,19 +163,21 @@ class BayesENproteomics:
                             subQuantadd = [''],
                             form='progenesis',
                             random_effects='all',
-                            nChains=3):
+                            nChains=3,
+                            continuousvars=[]):
 
         bayeslm = fitProteinModels
         # Protein qunatification: fit protein or dataset model
-        protein_summary_quant, PTM_summary_quant, isoform_summary_quant, protein_subject_quant, PTM_subject_quant, models, allValues, missingValues = bayeslm(self.longtable,
-                                                                                                                                                              otherinteractors,
-                                                                                                                                                              incSubject,
-                                                                                                                                                              subQuantadd,
-                                                                                                                                                              self.input_table['group number'][0],
-                                                                                                                                                              self.input_table['run number'][0],
-                                                                                                                                                              self.input_table['minimum peptides'][0],
-                                                                                                                                                              random_effects,
-                                                                                                                                                              nChains)
+        protein_summary_quant, PTM_summary_quant, isoform_summary_quant, protein_subject_quant, PTM_subject_quant, models, allValues, missingValues, OtherMains_table = bayeslm(self.longtable,
+                                                                                                                                                                                otherinteractors,
+                                                                                                                                                                                incSubject,
+                                                                                                                                                                                subQuantadd,
+                                                                                                                                                                                self.input_table['group number'][0],
+                                                                                                                                                                                self.input_table['run number'][0],
+                                                                                                                                                                                self.input_table['minimum peptides'][0],
+                                                                                                                                                                                random_effects,
+                                                                                                                                                                                nChains,
+                                                                                                                                                                                continuousvars)
         protein_list = list(protein_summary_quant.iloc[:,0].values.flatten())
         protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
 
@@ -190,11 +194,11 @@ class BayesENproteomics:
         for protein in protein_list:
             protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
             if np.any(protein_info_idx):
-                protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
+                protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-3]]]
                 if protein_ids.shape[0] == 0:
-                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
             else:
-                protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
             protein_info = protein_info.append(protein_ids.iloc[0,:])
 
@@ -207,18 +211,21 @@ class BayesENproteomics:
         self.protein_subject_quant = pd.concat((protein_subject_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
         self.protein_subject_quant.to_csv(self.output_name+'\\protein_subject_quant.csv', encoding='utf-8', index=False,header=self.protein_subject_quant.columns)
         self.allValues.to_csv(self.output_name+'\\allValues.csv', encoding='utf-8', index=False,header=self.allValues.columns)
+        self.other_summary_quant =  pd.concat((OtherMains_table,protein_info.reset_index(drop=True)),axis=1,sort=False)
+        self.other_summary_quant = EBvar(self.other_summary_quant)[0]
+        self.other_summary_quant.to_csv(self.output_name+'\\other_summary_quant.csv', encoding='utf-8', index=False,header=self.other_summary_quant.columns)
 
         if PTM_summary_quant.shape[0] > 0:
             protein_list = list(PTM_summary_quant.iloc[:,1].values.flatten())
-            protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
+            protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-3]])
             for protein in protein_list:
                 protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
                 if np.any(protein_info_idx):
-                    protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
+                    protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-3]]]
                     if protein_ids.shape[0] == 0:
-                        protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                        protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
                 else:
-                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
                 protein_info = protein_info.append(protein_ids.iloc[0,:])
 
@@ -234,15 +241,15 @@ class BayesENproteomics:
             subQuant = self.protein_subject_quant
 
         protein_list = list(isoform_summary_quant.iloc[:,0].values.flatten())
-        protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-2]])
+        protein_info = pd.DataFrame(columns = self.UniProt.columns[[0,2,-3]])
         for protein in protein_list:
             protein_info_idx = self.UniProt.iloc[:,1].isin([protein])
             if np.any(protein_info_idx):
-                protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-2]]]
+                protein_ids = self.UniProt.loc[protein_info_idx,self.UniProt.columns[[0,2,-3]]]
                 if protein_ids.shape[0] == 0:
-                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                    protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
             else:
-                protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-2]])
+                protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
             protein_info = protein_info.append(protein_ids.iloc[0,:])
 
@@ -329,13 +336,19 @@ class BayesENproteomics:
             print('pathway_summary_quant output missing')
 
         try:
+            other_summary_quant = pd.read_table(self.output_name+'\\other_summary_quant.csv',sep = ',')
+            self.other_summary_quant = other_summary_quant
+        except:
+            print('other_summary_quant output missing')
+
+        try:
             Reactome = pd.read_table(self.output_name+'\\Reactome.csv',sep = ',')
             self.Reactome = Reactome
         except:
             print('Reactome pathway data missing')
 
     # Compare all proteins between two experimental groups, repeated calls overwrite previous self.Constrasted
-    def doContrasts(self, Contrasted = 'protein', ctrl=0, propagateErrors=False,UseBayesFactors=False):
+    def doContrasts(self, Contrasted = 'protein', ctrl=0, propagateErrors=False, UseBayesFactors=False, continuous=False):
 
         if Contrasted == 'protein':
             self.Contrasted = dc(self.protein_summary_quant)
@@ -343,13 +356,19 @@ class BayesENproteomics:
             self.Contrasted = dc(self.PTM_summary_quant)
         elif Contrasted == 'pathway':
             self.Contrasted = dc(self.pathway_summary_quant)
+        elif Contrasted == 'other':
+            self.Contrasted = dc(self.other_summary_quant)
         else:
-            msg = 'Contrasted must be ''pathway'', ''protein'' or ''ptm''.'
+            msg = 'Contrasted must be ''pathway'', ''protein'', ''ptm'' or ''other''.'
             raise InputError(Contrasted,msg)
 
         DoFs = np.array(self.Contrasted['degrees of freedom'])[:,np.newaxis].astype(float)
         FCcolumns = np.array(self.Contrasted.iloc[:,['fold change}' in i for i in self.Contrasted.columns]])
-        FCs = FCcolumns - FCcolumns[:,ctrl][:,np.newaxis]
+        ctrlvals = FCcolumns[:,ctrl][:,np.newaxis]
+        if continuous:
+            FCs = FCcolumns
+        else:
+            FCs = FCcolumns - ctrlvals
         nProteins, nGroups = FCcolumns.shape
         SEs = np.array(self.Contrasted.iloc[:,['{SE}' in i for i in self.Contrasted.columns]])
 
@@ -446,7 +465,7 @@ class BayesENproteomics:
         if plot_type == 'protein':
             o = self.protein_subject_quant.iloc[:,0:nRuns].transpose()
         elif plot_type == 'peptide':
-            o = np.array(self.allValues.iloc[1:,2:].transpose())
+            o = self.allValues.iloc[1:,2:].transpose()
             #missingidx = np.array(self.missing_peptides_idx.iloc[1:,:].transpose())==True
             #o[missingidx] = np.nan
         elif plot_type == 'ptm':
@@ -854,7 +873,7 @@ def formatData(normpeplist,
     else:
         if form == 'maxquant' or form == 'peaks':
             for i in range(len(GroupNames)):
-                GroupNames[i] = re.sub(r'(\.[0-9+])','',GroupNames[i])
+                GroupNames[i] = re.sub(r'(\.[0-9]+)','',GroupNames[i])
 
         GroupIDs = set(GroupNames)
         nGroups = len(GroupIDs)
@@ -862,8 +881,19 @@ def formatData(normpeplist,
 
     if othermains_bysample != '':
         e_mainsampleeffects = pd.read_csv(othermains_bysample) #.csv assigning additional column varibles to each run
-        othermains_bysample_names = e_mainsampleeffects.columns
+        #print(e_mainsampleeffects)
+        try:
+            GroupNames = e_mainsampleeffects['Group']
+            GroupIDs = set(GroupNames)
+            nGroups = len(GroupIDs)
+            e_mainsampleeffects = e_mainsampleeffects.loc[:,e_mainsampleeffects.columns != 'Group']
+        except:
+            if form == 'progenesis':
+                print('No "Group" variable in '+othermains_bysample+'. Using column headers from '+exppeplist+'.')
+            else:
+                print('No "Group" variable in '+othermains_bysample+'. Using column headers from '+exppeplist[0]+'.')
         nSmains = e_mainsampleeffects.shape[1]
+        othermains_bysample_names = e_mainsampleeffects.columns
     if othermains_bypeptide != '':
         e_mainpeptideeffects = pd.read_csv(othermains_bypeptide) #.csv assigning additional row varibles to each peptide
         othermains_bypeptide_names = e_mainpeptideeffects.columns
@@ -889,7 +919,7 @@ def formatData(normpeplist,
     #print(scorebf)
 
     pepID_fdr = bhfdr(pepID_p)
-    print(pepID_fdr)
+    #print(pepID_fdr)
     #e_peplist = pd.concat([header,e_peplist.iloc[3:,:].loc[pepID_fdr < scorethreshold,:]])
     if othermains_bypeptide != '':
         e_mainpeptideeffects = pd.concat([e_mainpeptideeffects,e_peplist['Accession']],axis=1)
@@ -953,7 +983,7 @@ def formatData(normpeplist,
             e_peplist.loc[protein_find,e_peplist.columns[[gene_col,10]]] = protein_name
             review_status = 'unreviewed'
 
-        e_peplist['Reviewed?'].iloc[ii] = review_status
+        e_peplist['Reviewed?'].iloc[ii:] = review_status
         print('#',ii,'-',ii+int(np.sum(protein_find)),'/',e_length, protein_name, review_status)
         ii = ii + int(np.sum(protein_find))
 
@@ -1078,13 +1108,13 @@ def formatData(normpeplist,
     ## Sort out new main effects, create long vectors of other variables
     if othermains_bypeptide != '':
         #e_maineffects_peptide = np.zeros(((q-1)*len(runIDs),nPmains))
-        e_maineffects_peptide = np.tile(np.array(['a']),((q-1)*len(runIDs),nPmains))
+        e_maineffects_peptide = np.tile(np.array(['aaaaaaaaaaaaaa']),((q-1)*len(runIDs),nPmains))
         for i in range(nPmains):
             e_maineffects_peptide[:,i] = np.tile(np.array(final_pepmaineffectlist.iloc[:,i]),(len(runIDs),1)).flatten(order='F')
         e_maineffects_peptide = pd.DataFrame(e_maineffects_peptide,columns = othermains_bypeptide_names)#.astype('category')
     if othermains_bysample != '':
         #e_maineffects_sample = np.zeros(((q-1)*len(runIDs),nSmains))
-        e_maineffects_sample = np.tile(np.array(['a']),((q-1)*len(runIDs),nSmains))
+        e_maineffects_sample = np.tile(np.array(['aaaaaaaaaaaaaaa']),((q-1)*len(runIDs),nSmains))
         for i in range(nSmains):
             e_maineffects_sample[:,i] = np.tile(np.array(e_mainsampleeffects.iloc[:,i]),(1,(q-1))).flatten(order='F')
         e_maineffects_sample = pd.DataFrame(e_maineffects_sample,columns = othermains_bysample_names)#.astype('category')
@@ -1132,7 +1162,7 @@ def formatData(normpeplist,
 
     if othermains_bysample != '' or othermains_bypeptide != '':
         model_table = pd.concat([othermains,model_table],axis=1,sort = False)
-
+    print(model_table)
     if form == 'maxquant':
         ContaminantsNReverses = pd.DataFrame({'Potential contaminant':np.tile(np.array(final_peplist['Potential contaminant']),(len(runIDs),1)).flatten(order='F'),
                                             'Reverse':np.tile(np.array(final_peplist['Reverse']),(len(runIDs),1)).flatten(order='F'),
@@ -1155,8 +1185,12 @@ def formatData(normpeplist,
     return final_peplist.iloc[:,final_peplist.columns != 'ProteinSequence'], model_table, uniprotall, nGroups, nRuns
 
 # Model fitting function; fits individual models for each protein
-def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin,random_effects,nChains):
+def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin,random_effects,nChains,continuousvars=[]):
 
+    #Make sure continuous variables are specified as floats
+    model_table[continuousvars] = model_table[continuousvars].astype(np.float64)
+
+    #Sort out group and subject variables
     unique_proteins = np.unique(model_table.loc[:,'Protein'])
     t1 = list(np.unique(model_table.loc[:,'Treatment']))
     t2 = ['Treatment_']*len(t1)
@@ -1168,6 +1202,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #Preallocate dataframes to be filled by model fitting
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     ProteinQuant = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX'])
+    Othermains_column_types = model_table.columns[(model_table.columns != 'Treatment') * (model_table.columns != 'Peptide') * (model_table.columns != 'Protein') * (model_table.columns != 'PeptideSequence') * (model_table.columns != 'Score') * (model_table.columns != 'Subject') * (model_table.columns != 'ProteinSequence')]
     IsoformQuant = pd.DataFrame(columns = ['Parent Protein','Peptide','Scaled peptide score','degrees of freedom']+column_names)
     PTMQuant = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
     models = {} #Dictionary with all fitted protein models
@@ -1183,18 +1218,16 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #Fit protein models
     print('Fitting protein models...')
     q = 0
+    w = 0
     #v = 0
     for protein in unique_proteins:
         '''
-        if protein == 'MESD_RAT':
-            v=1
-            continue
+        if protein == 'PRI1_HUMAN':
+            v = 1
 
-        if v>10:
+        if v==0:
             continue
-        else:
-            v += 1
-            '''
+        '''
         start = time.time()
         protein_table = model_table.loc[model_table.loc[:,'Protein'] == protein,:].reset_index(drop=True)
         nPeptides = len(np.unique(protein_table['PeptideSequence']))
@@ -1267,6 +1300,35 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         TreatmentPeptide_betas = results[TreatmentPeptide_i]
         TreatmentPeptide_SEMs = SEMs[TreatmentPeptide_i]
 
+        #Sort out other main effects
+        OtherMains_names = np.array([])
+        OtherMains_betas = np.array([])
+        OtherMains_SEMs = np.array([])
+
+        for main in Othermains_column_types:
+            main_i = effectFinder(parameterIDs,main)
+            main_names = parameterIDs[np.newaxis][main_i]
+            main_betas = results[main_i]
+            main_SEMs = SEMs[main_i]
+            OtherMains_names = np.concatenate((OtherMains_names,main_names))
+            OtherMains_betas = np.concatenate((OtherMains_betas,main_betas))
+            OtherMains_SEMs = np.concatenate((OtherMains_SEMs,main_SEMs))
+
+        nOtherMains = OtherMains_names.shape[0]
+        OtherMains_columns = quantTableNameConstructor(list(OtherMains_names),nRuns)
+
+        if w == 0:
+            OtherMains_table = pd.DataFrame(columns = ['Protein','# peptides','degress of freedom','MSE']+OtherMains_columns)
+            w = 1
+
+        OtherMainsrow = {'Protein':protein,
+                  '# peptides':nPeptides,
+                  'degrees of freedom':dof,
+                  'MSE':proteinmdl['residVar'],
+                  }
+        OtherMainsrow.update(dict(zip(OtherMains_columns,list(OtherMains_betas)+list(OtherMains_SEMs)+[1]*nOtherMains*2)))
+        OtherMains_table = OtherMains_table.append(OtherMainsrow,ignore_index=True,sort=False)
+
         ntotalPTMs = 0
         for peptide in np.unique(protein_table.loc[:,'Peptide']):
 
@@ -1274,7 +1336,10 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             peptide_finder = protein_table.loc[:,'Peptide'].isin([peptide])
             parent_protein_sequnce = protein_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
             peptide_sequence = protein_table.loc[peptide_finder,'PeptideSequence'].iloc[0]
-            peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
+            try:
+                peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
+            except:
+                continue
 
             if peptide_position_in_protein.size == 0:
                 peptide_position_in_protein = 0
@@ -1391,7 +1456,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     SubjectLevelProteinQuant = SubjectLevelProteinQuant.loc[0:,:]
     PTMQuant_cleaned,SubjectLevelPTMQuant_cleaned = cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant)
 
-    return ProteinQuant, PTMQuant_cleaned, IsoformQuant, SubjectLevelProteinQuant.astype(float), SubjectLevelPTMQuant_cleaned.astype(float), models, allValues, missingValues
+    return ProteinQuant, PTMQuant_cleaned, IsoformQuant, SubjectLevelProteinQuant.astype(float), SubjectLevelPTMQuant_cleaned.astype(float), models, allValues, missingValues, OtherMains_table
 '''
 # Use PyMC3 to fit a single model for the entire dataset - very computationally intensive
 def fitDatasetModel(model_table,otherinteractors,incSubject,subQuantadd,nGroups,nRuns,pepmin,random_effects):
@@ -1800,7 +1865,7 @@ def PEAKS2BENP(peplist):
     GroupNames = list(intensity_cols.columns)
     runs = list(intensity_cols.columns)
     for i in range(len(GroupNames)):
-        GroupNames[i] = re.sub(r'_([0-9+])','',GroupNames[i])
+        GroupNames[i] = re.sub(r'(.[0-9]+)','',GroupNames[i])
     #GroupNames = np.unique(GroupNames)
     print(GroupNames)
 
@@ -2070,8 +2135,13 @@ def weighted_bayeslm_multi(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fix
     #with multiprocessing.Pool(nChains) as pool:
     params = [[X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,nIter,0]]*nChains
     params = [params[i]+[seeds[i]] for i in range(nChains)]
-
-    jobs = pool.starmap(weighted_bayeslm, (params))# for i in range(nChains)]
+    try:
+        jobs = pool.starmap(weighted_bayeslm, (params))# for i in range(nChains)]
+    except:
+        seeds = [s+nChains for s in seeds]
+        params = [[X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,nIter,nBurn]]*nChains
+        params = [params[i]+[seeds[i]] for i in range(nChains)]
+        jobs = pool.starmap(weighted_bayeslm, (params))
 
     pool.close()
     pool.join()
@@ -2111,7 +2181,13 @@ def weighted_bayeslm_multi(X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fix
         #with multiprocessing.Pool(nChains) as pool:
         params = [[X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,nIter,nBurn]]*nChains
         params = [params[i]+[seeds[i]]+[jobs[i]] for i in range(nChains)]
-        jobs = pool.starmap(weighted_bayeslm, (params))# for i in range(nChains)]
+        try:
+            jobs = pool.starmap(weighted_bayeslm, (params))# for i in range(nChains)]
+        except:
+            seeds = [s+nChains for s in seeds]
+            params = [[X,Y,featureIDs,do_weights,Scores,MNR,nInteractors,fixed_effect_ids,nIter,nBurn]]*nChains
+            params = [params[i]+[seeds[i]] for i in range(nChains)]
+            jobs = pool.starmap(weighted_bayeslm, (params))
 
         pool.close()
         pool.join()
