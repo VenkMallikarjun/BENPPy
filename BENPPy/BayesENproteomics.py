@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.1'
+__version__ = '2.5.3'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -174,7 +174,7 @@ class BayesENproteomics:
                                                                                                                                                                                 subQuantadd,
                                                                                                                                                                                 self.input_table['group number'][0],
                                                                                                                                                                                 self.input_table['run number'][0],
-                                                                                                                                                                                self.input_table['minimum peptides'][0],
+                                                                                                                                                                                pepmin,
                                                                                                                                                                                 random_effects,
                                                                                                                                                                                 nChains,
                                                                                                                                                                                 continuousvars)
@@ -212,7 +212,10 @@ class BayesENproteomics:
         self.protein_subject_quant.to_csv(self.output_name+'\\protein_subject_quant.csv', encoding='utf-8', index=False,header=self.protein_subject_quant.columns)
         self.allValues.to_csv(self.output_name+'\\allValues.csv', encoding='utf-8', index=False,header=self.allValues.columns)
         self.other_summary_quant =  pd.concat((OtherMains_table,protein_info.reset_index(drop=True)),axis=1,sort=False)
-        self.other_summary_quant = EBvar(self.other_summary_quant)[0]
+        try:
+            self.other_summary_quant = EBvar(self.other_summary_quant)[0]
+        except:
+            print('no other main effects.')
         self.other_summary_quant.to_csv(self.output_name+'\\other_summary_quant.csv', encoding='utf-8', index=False,header=self.other_summary_quant.columns)
 
         if PTM_summary_quant.shape[0] > 0:
@@ -1204,7 +1207,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
 
     #Preallocate dataframes to be filled by model fitting
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
-    ProteinQuant = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX'])
+    ProteinQuant = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'])
     Othermains_column_types = model_table.columns[(model_table.columns != 'Treatment') * (model_table.columns != 'Peptide') * (model_table.columns != 'Protein') * (model_table.columns != 'PeptideSequence') * (model_table.columns != 'Score') * (model_table.columns != 'Subject') * (model_table.columns != 'ProteinSequence')]
     IsoformQuant = pd.DataFrame(columns = ['Parent Protein','Peptide','Scaled peptide score','degrees of freedom']+column_names)
     PTMQuant = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
@@ -1258,15 +1261,18 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                 rand_eff_ids = rand_eff_ids+[effect+'_'+str(n) for n in list(np.unique(protein_table.loc[:,effect]))]
 
         fixed_eff_indices = [X.columns.get_loc(column) for column in X if column not in rand_eff_ids]
+        if nPeptides > 1:
+            X_missing = X[t+p]#X[parameterIDs.intersection(t+p)]
+        else:
+            X_missing = X[t]
 
-        X_missing = X[t+p]#X[parameterIDs.intersection(t+p)]
         missing = np.isnan(Y)
         Y_missing = (np.sign(missing.astype(float)-0.5)*10)#.astype('float32')
         parameterIDs_missing = X_missing.columns
         n = X_missing.shape[0]
         X_missing = np.array(X_missing,dtype=int)#sp.sparse.csc_matrix(np.array(X_missing,dtype=np.float32))
         X = np.array(X,dtype=int)#sp.sparse.csc_matrix(np.array(X,dtype=np.float32))
-        print(sum(missing)/n*100, '% missing values')
+        percent_missing = [np.sum(missing)/n*100]
 
         # Fit missing model to choose which missing values are MNR and which are MAR
         missingmdl = weighted_bayeslm_multi(X_missing,Y_missing,parameterIDs_missing,False,np.ones([n,1]),np.array([]),nInteractors,[],nChains,200,0)
@@ -1290,7 +1296,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
-        ProteinQuant = ProteinQuant.append(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
+        ProteinQuant = ProteinQuant.append(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax+percent_missing)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
 
         peptideIDs = np.array(protein_table['Peptide']).reshape((Yimputed.shape[0],-1))[:,0].reshape((Yimputed.shape[0],1))
         allValuesRows = np.concatenate((np.array([protein]*Yimputed.shape[0]).reshape((Yimputed.shape[0],1)),peptideIDs,Yimputed),axis=1)
@@ -1321,7 +1327,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         OtherMains_columns = quantTableNameConstructor(list(OtherMains_names),nRuns)
 
         if w == 0:
-            OtherMains_table = pd.DataFrame(columns = ['Protein','# peptides','degress of freedom','MSE']+OtherMains_columns)
+            OtherMains_table = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+OtherMains_columns)
             w = 1
 
         OtherMainsrow = {'Protein':protein,
@@ -1648,9 +1654,15 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
 
     # Create design matrix - all fixed effects... for now.
     if incSubject:
-        X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Potential contaminant','Reverse'])!=True]
+        if nPeptides > 1:
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Potential contaminant','Reverse'])!=True]
+        else:
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Potential contaminant','Reverse'])!=True]
     else:
-        X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse'])!=True]
+        if nPeptides > 1:
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse'])!=True]
+        else:
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse'])!=True]
 
     if regmethod == 'dataset':
         protein_effects = effectFinder(X_table.columns, 'Protein_')
