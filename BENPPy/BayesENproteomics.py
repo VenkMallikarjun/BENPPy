@@ -23,7 +23,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.3'
+__version__ = '2.5.6'
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -57,7 +57,8 @@ class BayesENproteomics:
                    nChains=3,
                    impute='ami',
                    reassign_unreviewed=True,
-                   continuousvars=[]):
+                   continuousvars=[],
+                   useReviewedOnly=False):
 
         self.preprocessData(normalisation_peptides,
                             experimental_peptides,
@@ -98,7 +99,8 @@ class BayesENproteomics:
                         nDB=1,
                         ContGroup=[],
                         impute='ami',
-                        reassign_unreviewed=True):
+                        reassign_unreviewed=True,
+                        useReviewedOnly=False):
 
         if regression_method == 'dataset':
             #otherinteractors['Protein_'] = 'Treatment'
@@ -120,7 +122,8 @@ class BayesENproteomics:
                                                                        self.form,
                                                                        self.update_databases,
                                                                        impute,
-                                                                       reassign_unreviewed)
+                                                                       reassign_unreviewed,
+                                                                       useReviewedOnly)
         self.peptides_used = peptides_used
         #self.missing_peptides_idx = missing_peptides_idx
         self.UniProt = UniProt
@@ -185,7 +188,10 @@ class BayesENproteomics:
         self.input_table.to_csv(self.output_name+'\\input_table.csv', encoding='utf-8', index=False,header=self.input_table.columns)
         self.missingValues = missingValues
         if self.form == 'progenesis':
-            self.missingValues.columns = self.peptides_used.columns[13:]
+            try:
+                self.missingValues.columns = self.peptides_used.columns[13:]
+            except:
+                self.missingValues.columns = self.peptides_used.columns[17:]
         else:
             self.missingValues.columns = self.peptides_used.columns[11:]
         self.missingValues.to_csv(self.output_name+'\\missing_peptides_idx.csv', encoding='utf-8', index=False,header=missingValues.columns)
@@ -825,12 +831,17 @@ def formatData(normpeplist,
                 form='progenesis',
                 download=True,
                 impute='ami',
-                reassign_unreviewed=True):
+                reassign_unreviewed=True,
+                useReviewedOnly=False):
 
     #get uniprot info
     print('Getting Uniprot data for',organism)
     uniprotall, upcol = getUniprotdata(organism,download)
-    uniprotall_reviewed = uniprotall.loc[uniprotall.iloc[:,-1] == 'reviewed',:]
+    uniprotall_reviewed = uniprotall.loc[uniprotall.iloc[:,-2] == 'reviewed',:]
+
+    if useReviewedOnly:
+        uniprotall=uniprotall_reviewed
+
     print('Done!')
 
     #import peptide lists
@@ -1679,22 +1690,23 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
     ## Default is alway Peptide:Treatment, others are user-specified
     X_interactors = np.zeros([q,1])
     X_interactors = pd.DataFrame(X_interactors)
-    for i in X_main_labs:
-        if 'Treatment' in i and nPeptides > 2:
-            for ii in X_main_labs:
-                if 'Peptide' in ii:
-                    name = i+':'+ii
-                    temp = pd.DataFrame({name:np.array(X_main[i])*np.array(X_main[ii])})
-                    X_interactors = pd.concat([X_interactors,temp],axis=1,sort=False)
-
-    for i in interactors:
-        for ii in X_main_labs:
-            if i in ii:
-                for iii in X_main_labs:
-                    if interactors[i] in iii:
-                        name = ii + ':' + iii
-                        temp = pd.DataFrame({name:np.array(X_main[ii])*np.array(X_main[iii])})
+    if interactors != 'none':
+        for i in X_main_labs:
+            if 'Treatment' in i and nPeptides > 2:
+                for ii in X_main_labs:
+                    if 'Peptide' in ii:
+                        name = i+':'+ii
+                        temp = pd.DataFrame({name:np.array(X_main[i])*np.array(X_main[ii])})
                         X_interactors = pd.concat([X_interactors,temp],axis=1,sort=False)
+
+        for i in interactors:
+            for ii in X_main_labs:
+                if i in ii:
+                    for iii in X_main_labs:
+                        if interactors[i] in iii:
+                            name = ii + ':' + iii
+                            temp = pd.DataFrame({name:np.array(X_main[ii])*np.array(X_main[iii])})
+                            X_interactors = pd.concat([X_interactors,temp],axis=1,sort=False)
 
     X_interactors = X_interactors.iloc[:,1:]
     DM = pd.concat([X_main,X_interactors],axis=1,sort=False)
