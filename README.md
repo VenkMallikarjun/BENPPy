@@ -1,13 +1,13 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.5.3
+version 2.5.6
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
-The initial proof-of-concept is described in our [preprint](https://www.biorxiv.org/content/early/2018/05/10/295527) and in the [Matlab version](https://github.com/VenkMallikarjun/BayesENproteomics).
+If you find this method useful, please cite our [manuscript](https://pubs.acs.org/doi/10.1021/acs.jproteome.9b00468).
 
-## Additonal features over BayesENproteomics Matlab implementation:
+## Additonal features over BayesENproteomics [proof-of-concept Matlab implementation](https://github.com/VenkMallikarjun/BayesENproteomics):
   * User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
   * Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
   * No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
@@ -42,7 +42,7 @@ BENPPy can be imported by:
 ::
 
     new_instance = bp.BayesENproteomics(output_name,    # String specifying a folder name within your working directory where output files will be stored (folder will be created if it doesn't already exist).
-                                        form            # Can be either 'progenesis' (default) 'peaks' or 'maxquant' to specify the peptide list input format.
+                                        form            # Can be either 'progenesis' (default), 'peaks' or 'maxquant' to specify the peptide list input format.
                                         update_databases, # Boolean denoting whether to download new versions of UniProt and Reactome, defaults to True.
                                         )
 
@@ -55,7 +55,7 @@ BENPPy can be imported by:
                             organism,               # String specifying organism name. Can be 'human', 'mouse' or any UniProt proteome ID.
                             othermains_bysample,    # String specifying name of .csv file specifying additional main effects, with levels specified for each sample, to be included in model fitting. Defaults to ''.
                             othermains_bypeptide,   # String specifying name of .csv file specifying additional main effects, with levels specified for each peptide, to be included in model fitting. Defaults to ''.
-                            otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}.
+                            otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}. Specify sting 'none' to remove default peptide:treatment interactions.
                             regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset (depreciated).
                             normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation (also assumes values are already logged).
                             pepmin,                 # Scalar specifying minimum number of peptides to fit a model for a protein. Proteins with fewer than pepmin peptides will be ignored. Defaults to 3.
@@ -79,7 +79,7 @@ BENPPy can be imported by:
 * `reassign_unreviewed` should be disabled when analysing complete mixed species datasets (e.g. xenograft models) to avoid peptides from unreviewed proteins in one species being incorrectly assigned to reviewed proteins in the other species. If analysing the species separately (i.e. taking separate lists of species-unique peptides), `reassign_unreviewed` can be left enabled.
 
 
-** For MaxQuant and PEAKS files, ensure that the identifier for each sample is the same for samples belonging to the same treatment group. E.g. For MaxQuant in peptides.txt or PEAKS in protein-peptidesLFQ.csv, a list of headers for 6 columns of peptide intensites corresponding to 6 different samples from 2 treatment groups should be, for instance: `['IntensityGroup1','IntensityGroup1','IntensityGroup1','IntensityGroup2','IntensityGroup2','IntensityGroup2']`.
+** For MaxQuant and PEAKS files, ensure that the identifier for each sample is the same for samples belonging to the same treatment group. E.g. For MaxQuant in peptides.txt or PEAKS in protein-peptidesLFQ.csv, a list of headers for 6 columns of peptide intensites corresponding to 6 different samples from 2 treatment groups should be, for instance: `['IntensityGroup1','IntensityGroup1','IntensityGroup1','IntensityGroup2','IntensityGroup2','IntensityGroup2']`. Alternatively, the .csv file specified in `othermain_bysample` can also have a "Group" column to specify experimental groups without having to modify original peptide lists.
 
 
 *** Note that as of 13/06/2019, I have noticed that setting `nChains` to > 1 can cause the program to hang indefinitely when run in Spyder. The current work-around for this is to run it in an external terminal if `nChains` > 1 is required. 
