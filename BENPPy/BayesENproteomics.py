@@ -12,6 +12,7 @@ from sklearn.decomposition import PCA
 from scipy.cluster.hierarchy import dendrogram, linkage
 from sklearn.cluster import KMeans
 from scipy.spatial import distance
+from sklearn.metrics import silhouette_samples, silhouette_score
 
 '''
 import pymc3 as pm
@@ -23,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.6'
+__version__ = '2.5.8' #Added silhouette scores to Jump Method function with figure output
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -2487,12 +2488,15 @@ def JumpMethod(X):
     J = np.zeros((n,))
     d = np.zeros((n,))
     Vi = linalg.inv((X.T @ X)*np.eye(p))
+    sih_scores = np.zeros((n,))
 
     for k in range(1,n):
         clusterer = KMeans(n_clusters=k, random_state=10)
         cluster_labels = clusterer.fit_predict(X)
         cluster_centres = clusterer.cluster_centers_
         cluster_centres_mat = np.array([cluster_centres[i] for i in cluster_labels])
+        if k > 1:
+            sih_scores[k] = silhouette_score(X, cluster_labels)
 
         for dim in range(n):
             #Vi = linalg.inv((X[:,dim][np.newaxis].T @ X[:,dim][np.newaxis])*np.eye(n))
@@ -2501,13 +2505,21 @@ def JumpMethod(X):
         D[k] = np.mean(d)
         J[k] = D[k] - D[k-1]
 
-    mpl.figure(figsize=(10, 7))
-    mpl.plot(J, label = 'Delta D')
-    mpl.plot(D, label = 'Transformed Distortion')
-    mpl.legend(loc='best', shadow=False, scatterpoints=1)
-    mpl.ylabel('Value')
-    mpl.xlabel('K')
-
+    fig = mpl.figure(figsize=(10, 5))
+    ax = fig.add_subplot(121)
+    ax.plot(range(1,n),J[1:], label = 'Delta D')
+    ax.plot(range(1,n),D[2:], label = 'Transformed Distortion')
+    ax.legend(loc='best', shadow=False, scatterpoints=1)
+    ax.set_ylabel('Value')
+    ax.set_xlabel('K')
+    
+    ax2 = fig.add_subplot(122)
+    ax2.plot(range(1,n),sih_scores[1:])
+    ax2.set_ylabel('Average Silhouette Score')
+    ax2.set_xlabel('K')
+    print(np.nanargmax(J),np.nanargmax(sih_scores))
+    
+    fig.savefig('JumpMethodFigures.pdf')
     return np.nanargmax(J)
 
 def Impute(X,method,RA):
