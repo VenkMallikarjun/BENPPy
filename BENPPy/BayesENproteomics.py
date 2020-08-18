@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.8' #Added silhouette scores to Jump Method function with figure output
+__version__ = '2.5.9' #Added silhouette scores to Jump Method function with figure output
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -1169,7 +1169,7 @@ def formatData(normpeplist,
                                 'Peptide':Peptides,
                                 'PeptideSequence':PeptideSequence,
                                 'Score':Scores,
-                                'Treatment':Groups,
+                                'Group':Groups,
                                 'Subject':subject,
                                 'Intensities':Intensities,
                                 'ProteinSequence':ProteinSequence},
@@ -2512,13 +2512,13 @@ def JumpMethod(X):
     ax.legend(loc='best', shadow=False, scatterpoints=1)
     ax.set_ylabel('Value')
     ax.set_xlabel('K')
-    
+
     ax2 = fig.add_subplot(122)
     ax2.plot(range(1,n),sih_scores[1:])
     ax2.set_ylabel('Average Silhouette Score')
     ax2.set_xlabel('K')
     print(np.nanargmax(J),np.nanargmax(sih_scores))
-    
+
     fig.savefig('JumpMethodFigures.pdf')
     return np.nanargmax(J)
 
