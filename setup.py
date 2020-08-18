@@ -22,7 +22,6 @@ configuration = {
     'author_email' : 'vjmallikarjun@gmail.com',
     'license' : 'MIT License',
     'packages' : ['BENPPy'],
-    'install_requires': ['pymc3']
     }
 
 setuptools.setup(**configuration)
