@@ -64,7 +64,6 @@ BENPPy can be imported by:
                             nDB,                    # Scalar denoting number of databases used. Only modify this value if using earlier versions of Progenesis (<3.0). Defaults to 1.
                             incSubject,             # Bool denoting whether or not to include subject/run terms in model to be fit. Defaults to False.
                             subQuantadd,            # List of strings denoting which parameters to add to the 'Treatment' values to give subject-level quantification. Defaults to [''].
-                            ContGroup,              # Bool denoting whether treatment variable specified in experimental_peptides headers is treated as a single continuous variable rather than multiple levels of a categorical variable. Defaults to False.
                             random_effects,         # List of strings denoting which effects will be sampled from a Gaussian with a mean of 0. E.g. ['Peptide','Donor']. Defaults to ['All'].
                             nChains,                # Integer denoting how many chains to run for each protein. Chains are run in parallel. Defaults to 3.
                             impute,                 # String denoting which imputation method to use. Accepts either 'ami' (Adaptive Multiple Imputation; default) or 'dgd' (Down-shifted Gaussian Distribution imputation).
