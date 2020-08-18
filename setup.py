@@ -6,11 +6,10 @@ def readme():
 
 configuration = {
     'name' : 'BENPPy',
-    'version': '2.5.8',
+    'version': '2.5.9',
     'description' : 'BayesENproteomics in Python',
     'long_description' : readme(),
     'classifiers' : [
-        'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
