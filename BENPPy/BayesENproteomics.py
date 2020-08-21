@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.5.9' #Added silhouette scores to Jump Method function with figure output
+__version__ = '2.6.0' #Changed specification for continuous Group variables
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -65,6 +65,7 @@ class BayesENproteomics:
                             experimental_peptides,
                             organism,
                             pepmin,
+                            continuousvars,
                             othermains_bysample,
                             othermains_bypeptide,
                             regression_method,
@@ -85,12 +86,13 @@ class BayesENproteomics:
                                 nChains,
                                 continuousvars)
 
-        self.doPathwayAnalysis(nChains)
+        self.doPathwayAnalysis(nChains, continuousvars)
 
     def preprocessData(self, normalisation_peptides,
                         experimental_peptides,
                         organism,
                         pepmin,
+                        continuousvars,
                         othermains_bysample = '',
                         othermains_bypeptide = '',
                         regression_method = 'protein',
@@ -129,6 +131,11 @@ class BayesENproteomics:
         #self.missing_peptides_idx = missing_peptides_idx
         self.UniProt = UniProt
         self.longtable = longtable
+
+        if 'Group' in continuousvars:
+            nGroups = 1
+
+        print(nGroups,continuousvars)
 
         if self.form == 'maxquant' or self.form == 'peaks':
             input_table = pd.DataFrame({'group number':nGroups,
@@ -268,7 +275,7 @@ class BayesENproteomics:
         self.isoform_summary_quant.to_csv(self.output_name+'\\isoform_summary_quant.csv', encoding='utf-8', index=False,header=self.isoform_summary_quant.columns)
 
 
-    def doPathwayAnalysis(self, nChains = 3):
+    def doPathwayAnalysis(self, nChains = 3, continuousvars = []):
         # Pathway quantification: fit pathway models
         pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant,
                                                                            self.UniProt,
@@ -278,7 +285,8 @@ class BayesENproteomics:
                                                                            False,
                                                                            self.protein_subject_quant,
                                                                            self.update_databases,
-                                                                           nChains)
+                                                                           nChains,
+                                                                           continuousvars)
         if pathway_summary_quant.shape[0] > 0:
             pathway_summary_quant = EBvar(pathway_summary_quant)[0] # Empirical Bayes variance correction
             self.pathway_summary_quant = pathway_summary_quant
@@ -643,7 +651,7 @@ class BayesENproteomics:
 
 
 # Wrapper for pathway model fitting
-def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=3):
+def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=3,continuousvars=[]):
 
     try:
         if not download:
@@ -730,8 +738,11 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
     a = 1
     SEcolumns = np.array(models.loc[:,['{SE}' in i for i in models.columns]]).astype(float)
     doWeights = True
+    if 'Group' in continuousvars:
+        t1 = ['Group']
+    else:
+        t1 = list(np.unique(model_table['Group']))
 
-    t1 = list(np.unique(model_table['Treatment']))
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names)
     pathway_models = {}
@@ -1210,9 +1221,13 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
 
     #Sort out group and subject variables
     unique_proteins = np.unique(model_table.loc[:,'Protein'])
-    t1 = list(np.unique(model_table.loc[:,'Treatment']))
-    t2 = ['Treatment_']*len(t1)
-    t = [m+str(n) for m,n in zip(t2,t1)]
+    if 'Group' in continuousvars:
+        t1 = ['Group']
+        t = ['Group']
+    else:
+        t1 = list(np.unique(model_table.loc[:,'Group']))
+        t2 = ['Group_']*len(t1)
+        t = [m+str(n) for m,n in zip(t2,t1)]
     s = list(np.unique(model_table.loc[:,'Subject']))
     nProteins = len(unique_proteins)
     nInteractors = len(otherinteractors)
@@ -1305,7 +1320,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         #RhathatParam = parameterIDs[np.argmax(proteinmdl['Rhat'])]
 
         # Sort out protein-level effects
-        Treatment_i = effectFinder(parameterIDs,'Treatment')
+        Treatment_i = effectFinder(parameterIDs,'Group')
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
         ProteinQuant = ProteinQuant.append(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax+percent_missing)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
