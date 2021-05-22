@@ -11,7 +11,7 @@ If you find this method useful, please cite our [manuscript](https://pubs.acs.or
   * User-customised regression models to facilitate analysis of complex (or simple) experimental setups.
   * Protein and PTM run-level quantification (in addition to linear model fold change estimates) based on summation of user-specified effects.
   * No requirement to specify which PTMs to look for, BENPPy will automatically quantify any PTMs it can find (ideal for quantifying results obtained from unconstrained peptide search engines).
-  * MaxQuant compatibility.
+  * MaxQuant and PEAKS compatibility.
   * Control group error propagation when calculating significance (Welch's t-test), if desired.
   * Option to use Bayes Factors instead of p-values, if desired.
   * Option to run multiple MCMC in parallel for each protein - may improve numerical stability and reproducibility.
