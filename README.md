@@ -50,14 +50,14 @@ BENPPy can be imported by:
 
 ::
 
-    new_instance.doAnalysis(normalisation_peptides, # String specifying name of .csv file in format specified by 'form' containing peptides to be used for normalisation (can be the same as 'experimental_peptides').
-                            experimental_peptides,  # String specifying name of .csv file in format specified by 'form' containing peptides to be used in quantitation.
+    new_instance.doAnalysis(normalisation_peptides, # String specifying name of .csv file in format specified by 'form' containing peptides to be used for normalisation (can be the same as 'experimental_peptides'). Assumes values are not logged.
+                            experimental_peptides,  # String specifying name of .csv file in format specified by 'form' containing peptides to be used in quantitation. Assumes values are not logged.
                             organism,               # String specifying organism name. Can be 'human', 'mouse' or any UniProt proteome ID.
                             othermains_bysample,    # String specifying name of .csv file specifying additional main effects, with levels specified for each sample, to be included in model fitting. Defaults to ''.
                             othermains_bypeptide,   # String specifying name of .csv file specifying additional main effects, with levels specified for each peptide, to be included in model fitting. Defaults to ''.
                             otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}. Specify string 'none' to remove default peptide:treatment interactions.
                             regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset (depreciated).
-                            normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation (also assumes values are already logged).
+                            normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation.
                             pepmin,                 # Scalar specifying minimum number of peptides to fit a model for a protein. Proteins with fewer than pepmin peptides will be ignored. Defaults to 3.
                             ProteinGrouping,        # If ProteinGrouping is set to True, will treat all proteins with the same gene name as a single entity using all available peptides, otherwise each one will be calculated separately.
                             peptide_BHFDR,          # Scalar FDR cutoff employed to filter peptides before analysis. Defaults to 0.2.
