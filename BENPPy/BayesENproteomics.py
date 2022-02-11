@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.6.0' #Changed specification for continuous Group variables
+__version__ = '2.6.2' #Fixed error in interaction effects, introduced in 2.5.9
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -61,6 +61,7 @@ class BayesENproteomics:
                    continuousvars=[],
                    useReviewedOnly=False):
 
+        print('continuousvars =',continuousvars,othermains_bysample)
         self.preprocessData(normalisation_peptides,
                             experimental_peptides,
                             organism,
@@ -111,6 +112,7 @@ class BayesENproteomics:
             regression_method = 'protein'
             #bayeslm = fitDatasetModel
 
+        print('continuousvars =',continuousvars,othermains_bysample)
         peptides_used, longtable, UniProt, nGroups, nRuns = formatData(normalisation_peptides,
                                                                        experimental_peptides,
                                                                        organism,
@@ -742,7 +744,7 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
         t1 = ['Group']
     else:
         t1 = list(np.unique(model_table['Group']))
-
+    #print(continuousvars,t1)
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     PathwayQuant = pd.DataFrame(columns = ['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names)
     pathway_models = {}
@@ -1331,7 +1333,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         missingValues = missingValues.append(pd.DataFrame(data=missing.reshape((-1,nRuns)),columns=missingValues.columns),ignore_index=True,sort=False)
 
         # Sort out treatment:peptide interaction effects
-        TreatmentPeptide_i = effectFinder(parameterIDs,'Treatment',True,'Peptide')
+        TreatmentPeptide_i = effectFinder(parameterIDs,'Group',True,'Peptide')
         TreatmentPeptide_names = parameterIDs[np.newaxis][TreatmentPeptide_i]
         TreatmentPeptide_betas = results[TreatmentPeptide_i]
         TreatmentPeptide_SEMs = SEMs[TreatmentPeptide_i]
@@ -1372,11 +1374,14 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             peptide_finder = protein_table.loc[:,'Peptide'].isin([peptide])
             parent_protein_sequnce = protein_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
             peptide_sequence = protein_table.loc[peptide_finder,'PeptideSequence'].iloc[0]
+            peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
+
+            '''
             try:
                 peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
             except:
                 continue
-
+            '''
             if peptide_position_in_protein.size == 0:
                 peptide_position_in_protein = 0
 
@@ -1385,9 +1390,9 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             #Get effect value and SEM for peptide:treatment interaction
             beta_finder = list(filter(lambda x: x.endswith('Peptide_'+peptide), list(TreatmentPeptide_names))) #[beta.start() for beta in re.finditer('Peptide_'+peptide+'$',list(TreatmentPeptide_names))
             InteractionBetas = TreatmentPeptide_betas[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_betas[i] for i in beta_finder]
+            #if InteractionBetas.size == 0:
+            #    continue
 
-            if InteractionBetas.size == 0:
-                continue
             InteractionSEMs = TreatmentPeptide_SEMs[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_SEMs[i] for i in beta_finder]
             Interactionvalues = list(InteractionBetas)+list(InteractionSEMs)+[1]*nGroups*2
 
@@ -1682,14 +1687,14 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
     # Create design matrix - all fixed effects... for now.
     if incSubject:
         if nPeptides > 1:
-            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Potential contaminant','Reverse'])!=True]
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Potential contaminant','Reverse','Unique'])!=True]
         else:
-            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Potential contaminant','Reverse'])!=True]
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Potential contaminant','Reverse','Unique'])!=True]
     else:
         if nPeptides > 1:
-            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse'])!=True]
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse','Unique'])!=True]
         else:
-            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse'])!=True]
+            X_table = protein_table.loc[:,protein_table.columns.isin(['Protein','ProteinSequence','Peptide','PeptideSequence','Score','Intensities','Subject','Potential contaminant','Reverse','Unique'])!=True]
 
     if regmethod == 'dataset':
         protein_effects = effectFinder(X_table.columns, 'Protein_')
@@ -1708,7 +1713,7 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
     X_interactors = pd.DataFrame(X_interactors)
     if interactors != 'none':
         for i in X_main_labs:
-            if 'Treatment' in i and nPeptides > 2:
+            if 'Group' in i and nPeptides > 2:
                 for ii in X_main_labs:
                     if 'Peptide' in ii:
                         name = i+':'+ii
@@ -1776,7 +1781,6 @@ def normalise(X,Z=[],method='median'):
     if method == 'median':
         if not Z.empty:
             median_Z = np.nanmedian(Z,axis=0)
-            print(median_Z)
         else:
             median_Z = np.nanmedian(X,axis=0)
         normalised_X = X - median_Z
@@ -1787,7 +1791,6 @@ def normalise(X,Z=[],method='median'):
         else:
             rank_mean = X.stack().groupby(X.rank(method='average',na_option='top').stack().astype(int)).mean()
         #rank_mean[np.isinf(rank_mean)] = 0
-        print(rank_mean)
         normalised_X = X.rank(method='average').stack().astype(int).map(rank_mean).unstack()
 
     return normalised_X
