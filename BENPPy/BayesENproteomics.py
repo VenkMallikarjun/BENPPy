@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.6.2' #Fixed error in interaction effects, introduced in 2.5.9
+__version__ = '2.6.3' #Fixed incorrect reporting of non-existant interaction effects in PTMsummaryQuant
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -1390,8 +1390,8 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             #Get effect value and SEM for peptide:treatment interaction
             beta_finder = list(filter(lambda x: x.endswith('Peptide_'+peptide), list(TreatmentPeptide_names))) #[beta.start() for beta in re.finditer('Peptide_'+peptide+'$',list(TreatmentPeptide_names))
             InteractionBetas = TreatmentPeptide_betas[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_betas[i] for i in beta_finder]
-            #if InteractionBetas.size == 0:
-            #    continue
+            if InteractionBetas.size == 0:
+                continue
 
             InteractionSEMs = TreatmentPeptide_SEMs[[list(TreatmentPeptide_names).index(beta) for beta in beta_finder]] #[TreatmentPeptide_SEMs[i] for i in beta_finder]
             Interactionvalues = list(InteractionBetas)+list(InteractionSEMs)+[1]*nGroups*2
