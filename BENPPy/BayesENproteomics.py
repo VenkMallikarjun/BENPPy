@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.6.3' #Fixed incorrect reporting of non-existant interaction effects in PTMsummaryQuant
+__version__ = '2.6.4' #Fixed 'Group' terms incorrectly appearing in Othermains table
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -1237,7 +1237,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     #Preallocate dataframes to be filled by model fitting
     column_names = quantTableNameConstructor(t1,nRuns,isSubjectLevelQuant = False)
     ProteinQuant = pd.DataFrame(columns = ['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'])
-    Othermains_column_types = model_table.columns[(model_table.columns != 'Treatment') * (model_table.columns != 'Peptide') * (model_table.columns != 'Protein') * (model_table.columns != 'PeptideSequence') * (model_table.columns != 'Score') * (model_table.columns != 'Subject') * (model_table.columns != 'ProteinSequence')]
+    Othermains_column_types = model_table.columns[(model_table.columns != 'Group') * (model_table.columns != 'Peptide') * (model_table.columns != 'Protein') * (model_table.columns != 'PeptideSequence') * (model_table.columns != 'Score') * (model_table.columns != 'Subject') * (model_table.columns != 'ProteinSequence')]
     IsoformQuant = pd.DataFrame(columns = ['Parent Protein','Peptide','Scaled peptide score','degrees of freedom']+column_names)
     PTMQuant = pd.DataFrame(columns=['Peptide #','Parent protein','Peptide','Scaled peptide score','PTMed residue','PTM type','PTM position in peptide','PTM position in protein','degrees of freedom']+column_names)
     models = {} #Dictionary with all fitted protein models
