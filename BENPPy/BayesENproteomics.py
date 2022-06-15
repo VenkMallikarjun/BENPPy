@@ -24,7 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.6.4' #Fixed 'Group' terms incorrectly appearing in Othermains table
+__version__ = '2.6.5' #Fixed errors when 'ProteinGrouping' set to True
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -87,7 +87,7 @@ class BayesENproteomics:
                                 nChains,
                                 continuousvars)
 
-        self.doPathwayAnalysis(nChains, continuousvars)
+        self.doPathwayAnalysis(nChains, continuousvars, ProteinGrouping)
 
     def preprocessData(self, normalisation_peptides,
                         experimental_peptides,
@@ -277,7 +277,7 @@ class BayesENproteomics:
         self.isoform_summary_quant.to_csv(self.output_name+'\\isoform_summary_quant.csv', encoding='utf-8', index=False,header=self.isoform_summary_quant.columns)
 
 
-    def doPathwayAnalysis(self, nChains = 3, continuousvars = []):
+    def doPathwayAnalysis(self, nChains = 3, continuousvars = [], ProteinGrouping = False):
         # Pathway quantification: fit pathway models
         pathway_summary_quant, pathway_models, Reactome = fitPathwayModels(self.protein_summary_quant,
                                                                            self.UniProt,
@@ -288,7 +288,8 @@ class BayesENproteomics:
                                                                            self.protein_subject_quant,
                                                                            self.update_databases,
                                                                            nChains,
-                                                                           continuousvars)
+                                                                           continuousvars,
+                                                                           ProteinGrouping)
         if pathway_summary_quant.shape[0] > 0:
             pathway_summary_quant = EBvar(pathway_summary_quant)[0] # Empirical Bayes variance correction
             self.pathway_summary_quant = pathway_summary_quant
@@ -653,7 +654,17 @@ class BayesENproteomics:
 
 
 # Wrapper for pathway model fitting
-def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False,subjectQuant=[],download = True,nChains=3,continuousvars=[]):
+def fitPathwayModels(models,
+                    uniprotall,
+                    species,
+                    model_table,
+                    nRuns,
+                    isPTMfile = False,
+                    subjectQuant = [],
+                    download = True,
+                    nChains = 3,
+                    continuousvars=[],
+                    ProteinGrouping = False):
 
     try:
         if not download:
@@ -688,11 +699,22 @@ def fitPathwayModels(models,uniprotall,species,model_table,nRuns,isPTMfile=False
 
     # Annotate pathway file with Identifiers used in protein quant
     u2r_protein_id = pd.DataFrame({'Entry name':['']*uniprot2reactomedf.shape[0]}) #columns = ['Entry name'])
-    for uniprotID in list(uniprotall.iloc[:,0].values.flatten()):
+    if ProteinGrouping:
+        uniprotall_proteinIDcolumn = 'Gene names  (primary )'
+        protein_summary_quantIDcolumn = 'Protein'
+    else:
+        uniprotall_proteinIDcolumn = 'Entry name'
+        protein_summary_quantIDcolumn = 'Entry'
+
+    for uniprotID,geneID in zip(list(uniprotall.iloc[:,0].values.flatten()),list(uniprotall.iloc[:,10].values.flatten())):
         u2r_protein_finder = uniprot2reactomedf.iloc[:,0].isin([uniprotID])
-        protein_list_finder = models['Entry'].isin([uniprotID])
+        if ProteinGrouping:
+            protein_list_finder = models[protein_summary_quantIDcolumn].isin([geneID])
+        else:
+            protein_list_finder = models[protein_summary_quantIDcolumn].isin([uniprotID])
+
         if np.any(u2r_protein_finder) and np.any(protein_list_finder):
-            name = uniprotall.loc[uniprotall.iloc[:,0].isin([uniprotID])]['Entry name'].iloc[0]
+            name = uniprotall.loc[uniprotall.iloc[:,0].isin([uniprotID])][uniprotall_proteinIDcolumn].iloc[0]
             u2r_protein_id.loc[u2r_protein_finder] = name
             print('Pathways found for', name)
     uniprot2reactomedf['Entry name'] = u2r_protein_id.reset_index(drop=True)
@@ -1081,7 +1103,7 @@ def formatData(normpeplist,
             reviewed_prot_find = uniprotall_reviewed['Sequence'].str.contains(pep_info.iloc[0,8]) #Find all reviewed proteins that peptide could be part of
             reviewed_prot_findidx = np.where(reviewed_prot_find)[0]
             if reviewed_prot_findidx.any():
-                new_protein_ids = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[[1+int(ProteinGrouping)*10,upcol]]]
+                new_protein_ids = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[[1+int(ProteinGrouping)*9,upcol]]]
                 new_protein_seq = uniprotall_reviewed.loc[reviewed_prot_find,uniprotall_reviewed.columns[12]]
                 is_present = np.zeros([e_length,new_protein_ids.shape[0]])
                 for ii in range(new_protein_ids.shape[0]):
@@ -1098,7 +1120,7 @@ def formatData(normpeplist,
                     pep_info['ProteinSequence'] = np.array(np.tile(new_protein_seq.iloc[0],(nP,1)))
                     e_peplist.loc[pep_find,e_peplist.columns[[10,gene_col]]] = np.array(np.tile(new_protein_ids.iloc[ia,:],(nP,1))) #Record which entries have been altered
 
-        protein_names = pep_info.iloc[:,gene_col+int(not ProteinGrouping)*4]
+        protein_names = pep_info.iloc[:,gene_col+int(not ProteinGrouping)*4].astype(str)
         if len(np.unique(protein_names)) > 1:
             continue
 
@@ -1222,7 +1244,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
     model_table[continuousvars] = model_table[continuousvars].astype(np.float64)
 
     #Sort out group and subject variables
-    unique_proteins = np.unique(model_table.loc[:,'Protein'])
+    unique_proteins = np.unique(model_table.loc[:,'Protein'].astype(str))
     if 'Group' in continuousvars:
         t1 = ['Group']
         t = ['Group']
@@ -1815,13 +1837,13 @@ def getUniprotdata(species, download = True):
     if download:
         if species == 'human':
             url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000005640&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
-            upcol = 11
+            upcol = 10
         elif species == 'mouse':
             url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000000589&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),database(MGI),reviewed,sequence'
-            upcol = 12
+            upcol = 11
         else:
             url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:'+species+'&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
-            upcol = 12
+            upcol = 10
 
         request = urllib.request.Request(url)
         response = urllib.request.urlopen(request)
