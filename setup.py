@@ -22,7 +22,7 @@ configuration = {
     'author_email' : 'vjmallikarjun@gmail.com',
     'license' : 'MIT License',
     'packages' : ['BENPPy'],
-    'install_requires': ['numpy','scipy','sklearn','matplotlib','pandas']
+    'install_requires': ['numpy','scipy','scikit-learn','matplotlib','pandas']
     }
 
 setuptools.setup(**configuration)
