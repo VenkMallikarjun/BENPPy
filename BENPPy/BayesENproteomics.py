@@ -24,7 +24,9 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.6.5' #Fixed errors when 'ProteinGrouping' set to True
+__version__ = '2.7.12' #Fixed errors caused by depreciation of pandas append()
+                      #Fixed errors caused by changes to UniProt API
+                      #Set default of otherinteractors to {'Peptide':'Group'} so this behaviour can be overwritten if desired  
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -43,12 +45,12 @@ class BayesENproteomics:
                    organism,
                    othermains_bysample = '',
                    othermains_bypeptide = '',
-                   otherinteractors = {},
+                   otherinteractors = {'Group':'Peptide'},
                    regression_method = 'protein',
                    normalisation_method='median',
                    pepmin=3,
                    ProteinGrouping=False,
-                   peptide_BHFDR=0.2,
+                   peptide_BHFDR=0.01,
                    nDB=1,
                    incSubject=False,
                    subQuantadd = [''],
@@ -61,7 +63,6 @@ class BayesENproteomics:
                    continuousvars=[],
                    useReviewedOnly=False):
 
-        print('continuousvars =',continuousvars,othermains_bysample)
         self.preprocessData(normalisation_peptides,
                             experimental_peptides,
                             organism,
@@ -99,7 +100,7 @@ class BayesENproteomics:
                         regression_method = 'protein',
                         normalisation_method='median',
                         ProteinGrouping=False,
-                        peptide_BHFDR=0.2,
+                        peptide_BHFDR=0.01,
                         nDB=1,
                         ContGroup=[],
                         impute='ami',
@@ -170,7 +171,7 @@ class BayesENproteomics:
         self.longtable.to_csv(self.output_name+'\\longtable.tab', encoding='utf-8', sep="\t", index=False,header=longtable.columns)
 
 
-    def doProteinAnalysis(self, otherinteractors = {},
+    def doProteinAnalysis(self, otherinteractors = {'Group':'Peptide'},
                             pepmin=3,
                             incSubject=False,
                             subQuantadd = [''],
@@ -180,7 +181,7 @@ class BayesENproteomics:
                             continuousvars=[]):
 
         bayeslm = fitProteinModels
-        # Protein qunatification: fit protein or dataset model
+        # Protein quantification: fit protein or dataset model
         protein_summary_quant, PTM_summary_quant, isoform_summary_quant, protein_subject_quant, PTM_subject_quant, models, allValues, missingValues, OtherMains_table = bayeslm(self.longtable,
                                                                                                                                                                                 otherinteractors,
                                                                                                                                                                                 incSubject,
@@ -216,8 +217,8 @@ class BayesENproteomics:
             else:
                 protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
-            protein_info = protein_info.append(protein_ids.iloc[0,:])
-
+            protein_info = pd.concat([protein_info, protein_ids.iloc[0,:]], axis=0, ignore_index=True, sort=False)
+            
         #allValues.set_axis(['protein','peptide']+list(self.peptides_used.columns)[12:],axis=1,inplace=True)
         self.allValues = allValues
         #self.allValues.columns[2:] = self.peptides_used.columns[12:]
@@ -246,7 +247,7 @@ class BayesENproteomics:
                 else:
                     protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
-                protein_info = protein_info.append(protein_ids.iloc[0,:])
+                protein_info = pd.concat([protein_info, protein_ids.iloc[0,:]], axis=0, ignore_index=True, sort=False)
 
             self.PTM_summary_quant = pd.concat((PTM_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
             self.PTM_summary_quant = EBvar(self.PTM_summary_quant)[0] # Empirical Bayes variance correction
@@ -270,7 +271,7 @@ class BayesENproteomics:
             else:
                 protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
-            protein_info = protein_info.append(protein_ids.iloc[0,:])
+            protein_info = pd.concat([protein_info, protein_ids.iloc[0,:]], axis=0, ignore_index=True, sort=False)
 
         self.isoform_summary_quant = pd.concat((isoform_summary_quant,protein_info.reset_index(drop=True)),axis=1,sort=False)
         self.isoform_summary_quant = EBvar(self.isoform_summary_quant)[0] # Empirical Bayes variance correction
@@ -811,8 +812,7 @@ def fitPathwayModels(models,
         Treatment_i = effectFinder(parameterIDs,'Treatment')
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
-        PathwayQuant = PathwayQuant.append(dict(zip(['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names,[uniprot2reactomedf2.iloc[i,1],uniprot2reactomedf2.iloc[i,3],nprot2,dof,pathwaymdl['residVar'],list(np.unique(proteins))]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
-
+        PathwayQuant = pd.concat([PathwayQuant, pd.DataFrame(dict(zip(['Pathway ID','Pathway description', '# proteins','degrees of freedom','MSE','protein list']+column_names,[uniprot2reactomedf2.iloc[i,1],uniprot2reactomedf2.iloc[i,3],nprot2,dof,pathwaymdl['residVar'],list(np.unique(proteins))]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2)))], axis=0, ignore_index=True, sort=False)
         pathway_models[uniprot2reactomedf2.iloc[i,3]] = pathwaymdl
 
         timetaken = time.time()-start
@@ -1013,7 +1013,7 @@ def formatData(normpeplist,
 
         uniprot_find = uniprotall.iloc[:,1].isin([protein_name])
         #uniprot_find.mask(unprot_find == 0)
-        review_status = uniprotall['Status'].loc[uniprot_find]
+        review_status = uniprotall['Reviewed'].loc[uniprot_find]
         protein_id = uniprotall.loc[uniprot_find,uniprotall.columns[[upcol,1]]]
         protein_sequence = uniprotall['Sequence'].loc[uniprot_find]
         #e_peplist.loc[protein_find,e_peplist.columns[1]] = e_peplist.loc[protein_find,e_peplist.columns[[8,9]]].astype(str).sum(axis=1)
@@ -1294,12 +1294,13 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             continue #Skip proteins with fewer than pepmin peptides in dataset or those composed of unassigned peptides
         #v = 1
         #Create design matrix (only add Treatment:Peptides interactions if more than 2 peptides)
-        X = designMatrix(protein_table,otherinteractors,incSubject,len(np.unique(protein_table['Peptide'])))
+        X = designMatrix(protein_table,otherinteractors,incSubject,nPeptides2)
         Y = np.array(protein_table.loc[:,'Intensities'])[:,np.newaxis]#.astype('float32')
         if np.all(np.isnan(Y)):
             continue
-        parameterIDs = X.columns
+        parameterIDs = np.array(X.columns)
         p = ['Peptide_'+str(n) for n in list(np.unique(protein_table.loc[:,'Peptide']))]
+        f = ['Fraction_'+str(n) for n in list(np.unique(protein_table.loc[:,'Fraction']))]
 
         #Identify user-specified random effects
         rand_eff_ids = []
@@ -1313,9 +1314,9 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
 
         fixed_eff_indices = [X.columns.get_loc(column) for column in X if column not in rand_eff_ids]
         if nPeptides > 1:
-            X_missing = X[t+p]#X[parameterIDs.intersection(t+p)]
+            X_missing = X[t+p+f]#X[parameterIDs.intersection(t+p)]
         else:
-            X_missing = X[t]
+            X_missing = X[t+f]
 
         missing = np.isnan(Y)
         Y_missing = (np.sign(missing.astype(float)-0.5)*10)#.astype('float32')
@@ -1347,18 +1348,12 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
         Treatment_i = effectFinder(parameterIDs,'Group')
         Treatment_betas = list(results[Treatment_i])
         Treatment_SEMs = list(SEMs[Treatment_i])
-        ProteinQuant = ProteinQuant.append(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax+percent_missing)),ignore_index=True,sort=False) #We'll calculate p-values (Bayes Factors?) and FDR-adjusted p-values later on.
-
+        ProteinQuant = pd.concat([ProteinQuant, pd.DataFrame(dict(zip(['Protein','# peptides','degrees of freedom','MSE']+column_names+['RhatMAX','% missing'],[protein,nPeptides,dof,proteinmdl['residVar']]+Treatment_betas+Treatment_SEMs+[1]*nGroups*2+Rhatmax+percent_missing)), index=[0])], axis=0, ignore_index=True, sort=False)
+        
         peptideIDs = np.array(protein_table['Peptide']).reshape((Yimputed.shape[0],-1))[:,0].reshape((Yimputed.shape[0],1))
         allValuesRows = np.concatenate((np.array([protein]*Yimputed.shape[0]).reshape((Yimputed.shape[0],1)),peptideIDs,Yimputed),axis=1)
-        allValues = allValues.append(pd.DataFrame(data=allValuesRows,columns=allValues.columns),ignore_index=True,sort=False)
-        missingValues = missingValues.append(pd.DataFrame(data=missing.reshape((-1,nRuns)),columns=missingValues.columns),ignore_index=True,sort=False)
-
-        # Sort out treatment:peptide interaction effects
-        TreatmentPeptide_i = effectFinder(parameterIDs,'Group',True,'Peptide')
-        TreatmentPeptide_names = parameterIDs[np.newaxis][TreatmentPeptide_i]
-        TreatmentPeptide_betas = results[TreatmentPeptide_i]
-        TreatmentPeptide_SEMs = SEMs[TreatmentPeptide_i]
+        allValues = pd.concat([allValues, pd.DataFrame(data=allValuesRows,columns=allValues.columns, index=np.arange(len(allValuesRows)))], axis=0, ignore_index=True, sort=False)
+        missingValues = pd.concat([missingValues, pd.DataFrame(data=missing.reshape((-1,nRuns)),columns=missingValues.columns, index=np.arange(len(missing.reshape((-1,nRuns)))))], axis=0, ignore_index=True, sort=False) 
 
         #Sort out other main effects
         OtherMains_names = np.array([])
@@ -1387,23 +1382,30 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                   'MSE':proteinmdl['residVar'],
                   }
         OtherMainsrow.update(dict(zip(OtherMains_columns,list(OtherMains_betas)+list(OtherMains_SEMs)+[1]*nOtherMains*2)))
-        OtherMains_table = OtherMains_table.append(OtherMainsrow,ignore_index=True,sort=False)
+        OtherMains_table = pd.concat([OtherMains_table, pd.DataFrame(OtherMainsrow, index=[1])], axis=0, ignore_index=True, sort=False)
 
+
+        # Sort out treatment:peptide interaction effects for PTM quant
+        TreatmentPeptide_i = effectFinder(parameterIDs,'Group',True,'Peptide')
+        TreatmentPeptide_names = parameterIDs[np.newaxis][TreatmentPeptide_i]
+        TreatmentPeptide_betas = results[TreatmentPeptide_i]
+        TreatmentPeptide_SEMs = SEMs[TreatmentPeptide_i]
         ntotalPTMs = 0
         for peptide in np.unique(protein_table.loc[:,'Peptide']):
 
             PTMpositions_in_peptide = np.array(re.findall(r'\[([0-9]+)\]',peptide)).astype(int)-1 #PTM'd residues denoted by [#]
             peptide_finder = protein_table.loc[:,'Peptide'].isin([peptide])
             parent_protein_sequnce = protein_table.loc[peptide_finder,'ProteinSequence'].iloc[0]
+            
+            try:
+                if np.isnan(parent_protein_sequnce):
+                    continue
+            except:
+                ''
+                
             peptide_sequence = protein_table.loc[peptide_finder,'PeptideSequence'].iloc[0]
             peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
 
-            '''
-            try:
-                peptide_position_in_protein = np.array([m.start() for m in re.finditer(peptide_sequence,parent_protein_sequnce)])
-            except:
-                continue
-            '''
             if peptide_position_in_protein.size == 0:
                 peptide_position_in_protein = 0
 
@@ -1446,7 +1448,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                               'degrees of freedom':dof}
                     PTMrow.update(dict(zip(column_names,Interactionvalues)))
 
-                    PTMQuant = PTMQuant.append(PTMrow,ignore_index=True,sort=False)
+                    PTMQuant = pd.concat([PTMQuant, pd.DataFrame(PTMrow, index=[1])], axis=0, ignore_index=True, sort=False)
 
                     if subQuantadd != [''] or incSubject:
                         # Subject-level PTM quantification by summing Treatment:Peptide interactions with user-specified:Peptide interaction terms
@@ -1482,7 +1484,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                               'degrees of freedom':dof}
                 Isoformrow.update(dict(zip(column_names,Interactionvalues)))
 
-                IsoformQuant = IsoformQuant.append(Isoformrow,ignore_index=True,sort=False)
+                IsoformQuant = pd.concat([IsoformQuant, pd.DataFrame(Isoformrow, index=[1])], axis=0, ignore_index=True, sort=False)
 
         if subQuantadd != [''] or incSubject:
             #Sort out Subject-level protein quantification
@@ -1691,16 +1693,15 @@ def cleanPTMquants(PTMQuant,nGroups,SubjectLevelPTMQuant = pd.DataFrame([])):
             PTMrow[['{SE}' in ii for ii in PTMrow.index]] = PTMSEs
             #PTMrow[['{EB t-test p-value}' in ii for ii in PTMrow.index]] = 1
             #PTMrow[['{BHFDR}' in ii for ii in PTMrow.index]] = 1
-            PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
-            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
         else:
             PTMrow = PTMQuant.loc[ptm_finder,:]
             #PTMrow[('{EB t-test p-value}' in ii for ii in PTMrow.columns)] = 1
             #PTMrow[('{BHFDR}' in ii for ii in PTMrow.columns)] = 1
             PTMSubjectrow = SubjectLevelPTMQuant.loc[ptm_finder,:]
-            PTMQuant_cleaned = PTMQuant_cleaned.append(PTMrow, ignore_index = True, sort = False)
-            SubjectLevelPTMQuant_cleaned = SubjectLevelPTMQuant_cleaned.append(PTMSubjectrow, ignore_index = True, sort = False)
-
+        
+        PTMQuant_cleaned = pd.concat([PTMQuant_cleaned, PTMrow], axis=0, ignore_index=True, sort=False)
+        SubjectLevelPTMQuant_cleaned = pd.concat([SubjectLevelPTMQuant_cleaned, PTMSubjectrow], axis=0, ignore_index=True, sort=False)
+        
     return PTMQuant_cleaned, SubjectLevelPTMQuant_cleaned
 
 # Create design matrix for Treatment + Peptide + Treatment*Peptide + additional user-specified main and interaction effects.
@@ -1730,22 +1731,20 @@ def designMatrix(protein_table,interactors,incSubject,nPeptides,regmethod = 'pro
     q = X_main.shape[0]
 
     # Process interactions (specified as a dictionary e.g. {Interactor1:Interactor2,Interactor3:Interactor1})
-    ## Default is alway Peptide:Treatment, others are user-specified
+    ## Default is Peptide:Treatment, others are user-specified
     X_interactors = np.zeros([q,1])
     X_interactors = pd.DataFrame(X_interactors)
-    if interactors != 'none':
-        for i in X_main_labs:
-            if 'Group' in i and nPeptides > 2:
-                for ii in X_main_labs:
-                    if 'Peptide' in ii:
-                        name = i+':'+ii
-                        temp = pd.DataFrame({name:np.array(X_main[i])*np.array(X_main[ii])})
-                        X_interactors = pd.concat([X_interactors,temp],axis=1,sort=False)
-
+    if interactors != 'none' or interactors != {}:
         for i in interactors:
             for ii in X_main_labs:
+                if 'Peptide' in ii and nPeptides < 2:   #Skip making peptide interaction effects for proteins with only 1 peptide
+                    continue
+                
                 if i in ii:
                     for iii in X_main_labs:
+                        if 'Peptide' in iii and nPeptides < 2:
+                            continue
+                        
                         if interactors[i] in iii:
                             name = ii + ':' + iii
                             temp = pd.DataFrame({name:np.array(X_main[ii])*np.array(X_main[iii])})
@@ -1831,18 +1830,18 @@ def bhfdr(p):
     fdr[idx] = fdr_ord
     return fdr
 
-# Pull 'species' data from Uniprot where 'species' is a string with either 'human' or 'mouse' or a UniProt Proteome ID
+# Pull 'species' data from Uniprot where 'species' is a string with either 'human' or 'mouse' or a UniProt Taxonomy ID
 def getUniprotdata(species, download = True):
     upcol = 11
     if download:
         if species == 'human':
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000005640&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
+            url = 'https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Cid%2Cprotein_name%2Cgene_names%2Cgo%2Cgo_p%2Cgo_f%2Cgo_c%2Cgo_id%2Ccc_interaction%2Cgene_primary%2Creviewed%2Csequence&format=tsv&query=%28*%29+AND+%28model_organism%3A9606%29'
             upcol = 10
         elif species == 'mouse':
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:UP000000589&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),database(MGI),reviewed,sequence'
+            url = 'https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Cid%2Cprotein_name%2Cgene_names%2Cgo%2Cgo_p%2Cgo_f%2Cgo_c%2Cgo_id%2Ccc_interaction%2Cgene_primary%2Cxref_mgi%2Creviewed%2Csequence&format=tsv&query=%28*%29+AND+%28model_organism%3A10090%29'
             upcol = 11
         else:
-            url = 'http://www.uniprot.org/uniprot/?sort=&desc=&compress=no&query=proteome:'+species+'&fil=&force=no&preview=true&format=tab&columns=id,entry%20name,protein%20names,genes,go,go(biological%20process),go(molecular%20function),go(cellular%20component),go-id,interactor,genes(PREFERRED),reviewed,sequence'
+            url = 'https://rest.uniprot.org/uniprotkb/stream?fields=accession%2Cid%2Cprotein_name%2Cgene_names%2Cgo%2Cgo_p%2Cgo_f%2Cgo_c%2Cgo_id%2Ccc_interaction%2Cgene_primary%2Creviewed%2Csequence&format=tsv&query=%28*%29+AND+%28model_organism%3A'+species+'%29'
             upcol = 10
 
         request = urllib.request.Request(url)
