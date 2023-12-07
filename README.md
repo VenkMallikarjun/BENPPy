@@ -1,7 +1,7 @@
 # BENPPy: BayesENproteomics in Python
 Python implementation of BayesENproteomics.
 
-version 2.6.5
+version 2.7.12
 
 BayesENproteomics fits user-specified regression models of arbitrary complexity to accurately model protein and post-translational modification fold changes in label-free proteomics experiments. BayesENproteomics uses Elastic Net regularization and observation weighting based on residual size and peptide identification confidence, implemented via MCMC sampling from conditional distributions, to prevent overfitting.
 
@@ -55,7 +55,7 @@ BENPPy can be imported by:
                             organism,               # String specifying organism name. Can be 'human', 'mouse' or any UniProt proteome ID.
                             othermains_bysample,    # String specifying name of .csv file specifying additional main effects, with levels specified for each sample, to be included in model fitting. Defaults to ''.
                             othermains_bypeptide,   # String specifying name of .csv file specifying additional main effects, with levels specified for each peptide, to be included in model fitting. Defaults to ''.
-                            otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {}. Specify string 'none' to remove default peptide:treatment interactions.
+                            otherinteractors,       # Dictionary specifying additional interacting parameters (E.g. {'Interactor1':'Interactor2','Interactor1':'Interactor3'}). Order of interactors does not matter. Defaults to {'Peptide':'Group'}. Specify {} to remove default peptide:treatment interactions.
                             regression_method,      # Can be either 'protein' (default) to fit separate models for each protein, or 'dataset' to fit a single model for entire dataset (depreciated).
                             normalisation_method,   # Can be either 'median' (default) to normalise by median subtraction following log transformation, or 'none' to perform no normalisation.
                             pepmin,                 # Scalar specifying minimum number of peptides to fit a model for a protein. Proteins with fewer than pepmin peptides will be ignored. Defaults to 3.
