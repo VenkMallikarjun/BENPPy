@@ -1,4 +1,4 @@
 from .BayesENproteomics import *
 
-version = '2.6.5'
+version = '2.7.12'
 
