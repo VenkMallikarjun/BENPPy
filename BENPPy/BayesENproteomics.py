@@ -24,9 +24,8 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.7.12' #Fixed errors caused by depreciation of pandas append()
-                      #Fixed errors caused by changes to UniProt API
-                      #Set default of otherinteractors to {'Peptide':'Group'} so this behaviour can be overwritten if desired  
+__version__ = '2.7.13' #Fixed specification of fraction in missing model
+                       #Remove peptide factors from missing model  
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -1300,7 +1299,11 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             continue
         parameterIDs = np.array(X.columns)
         p = ['Peptide_'+str(n) for n in list(np.unique(protein_table.loc[:,'Peptide']))]
-        f = ['Fraction_'+str(n) for n in list(np.unique(protein_table.loc[:,'Fraction']))]
+        f = ['']
+        try:
+            f = ['Fraction_'+str(n) for n in list(np.unique(protein_table.loc[:,'Fraction']))]
+        except:
+            ''
 
         #Identify user-specified random effects
         rand_eff_ids = []
@@ -1313,11 +1316,13 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
                 rand_eff_ids = rand_eff_ids+[effect+'_'+str(n) for n in list(np.unique(protein_table.loc[:,effect]))]
 
         fixed_eff_indices = [X.columns.get_loc(column) for column in X if column not in rand_eff_ids]
+        X_missing = X[t+f]
+        '''
         if nPeptides > 1:
             X_missing = X[t+p+f]#X[parameterIDs.intersection(t+p)]
         else:
             X_missing = X[t+f]
-
+        '''
         missing = np.isnan(Y)
         Y_missing = (np.sign(missing.astype(float)-0.5)*10)#.astype('float32')
         parameterIDs_missing = X_missing.columns
