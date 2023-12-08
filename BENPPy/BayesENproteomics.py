@@ -24,8 +24,7 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.7.13' #Fixed specification of fraction in missing model
-                       #Remove peptide factors from missing model  
+__version__ = '2.7.14' #Actually Fixed specification of fraction in missing model this time
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -1299,7 +1298,7 @@ def fitProteinModels(model_table,otherinteractors,incSubject,subQuantadd,nGroups
             continue
         parameterIDs = np.array(X.columns)
         p = ['Peptide_'+str(n) for n in list(np.unique(protein_table.loc[:,'Peptide']))]
-        f = ['']
+        f = []
         try:
             f = ['Fraction_'+str(n) for n in list(np.unique(protein_table.loc[:,'Fraction']))]
         except:
