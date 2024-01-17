@@ -24,7 +24,8 @@ import os
 import multiprocessing
 import time
 
-__version__ = '2.7.14' #Actually Fixed specification of fraction in missing model this time
+__version__ = '2.7.18' #Fix issue with gathering protein info and writing output protein_summary_quant table
+                       #Fix new issue with EBvar and doContrasts when updating values 
 
 # Output object that hold all results variables
 class BayesENproteomics:
@@ -215,7 +216,7 @@ class BayesENproteomics:
             else:
                 protein_ids = pd.DataFrame([['NA','NA','NA']],columns = self.UniProt.columns[[0,2,-3]])
 
-            protein_info = pd.concat([protein_info, protein_ids.iloc[0,:]], axis=0, ignore_index=True, sort=False)
+            protein_info = pd.concat([protein_info, pd.DataFrame(protein_ids.iloc[0,:]).T], axis=0, ignore_index=True, sort=False)
             
         #allValues.set_axis(['protein','peptide']+list(self.peptides_used.columns)[12:],axis=1,inplace=True)
         self.allValues = allValues
@@ -399,7 +400,7 @@ class BayesENproteomics:
 
         if UseBayesFactors:
             BF = FCs**2/(2*SEs**2)
-            self.Contrasted.iloc[:,['{EB t-test p-value}' in i for i in self.Contrasted.columns]] = BF
+            self.Contrasted.loc[:,['{EB t-test p-value}' in i for i in self.Contrasted.columns]] = BF
         else:
             t = abs(FCs)/SEs
             pvals = np.minimum(1,stats.t.sf(t, DoFs - 1) * 2)
@@ -408,11 +409,11 @@ class BayesENproteomics:
             for i in range(nGroups):
                 fdradjp[:,i] = bhfdr(pvals[:,i])
 
-            self.Contrasted.iloc[:,['{EB t-test p-value}' in i for i in self.Contrasted.columns]] = pvals
-            self.Contrasted.iloc[:,['{BHFDR}' in i for i in self.Contrasted.columns]] = fdradjp
+            self.Contrasted[self.Contrasted.columns[['{EB t-test p-value}' in i for i in self.Contrasted.columns]]] = pvals
+            self.Contrasted[self.Contrasted.columns[['{BHFDR}' in i for i in self.Contrasted.columns]]] = fdradjp
 
-        self.Contrasted.iloc[:,['fold change}' in i for i in self.Contrasted.columns]] = FCs
-        self.Contrasted.iloc[:,['{SE}' in i for i in self.Contrasted.columns]] = SEs
+        self.Contrasted[self.Contrasted.columns[['fold change}' in i for i in self.Contrasted.columns]]] = FCs
+        self.Contrasted[self.Contrasted.columns[['{SE}' in i for i in self.Contrasted.columns]]] = SEs
         self.Contrasted.to_csv(self.output_name+'\\Contrasted_vs_Col'+str(ctrl)+'.csv', encoding='utf-8', index=False,header=self.Contrasted.columns)
 
     def boxplots(self):
@@ -845,7 +846,7 @@ def EBvar(models):
             newSEM = np.sqrt(lam * oldVar + (1 - lam) * s0) * np.sqrt(2/((EBDoFs[ii])/2 + 2))
             SEcolumns[ii,i] = newSEM
 
-    models.iloc[:,['{SE}' in i for i in models.columns]] = SEcolumns
+    models.loc[:,['{SE}' in i for i in models.columns]] = SEcolumns
     models['degrees of freedom'] = EBDoFs
 
     return models,{'d0':d0, 's0':s0}
